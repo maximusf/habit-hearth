@@ -9,6 +9,7 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 
 private val DarkColorScheme = darkColorScheme(
@@ -33,6 +34,9 @@ private val LightColorScheme = lightColorScheme(
     */
 )
 
+private val AppBackground = Color(0xFF0A3323)
+private val AppText = Color.White
+
 @Composable
 fun HabitHearthTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
@@ -50,8 +54,31 @@ fun HabitHearthTheme(
         else -> LightColorScheme
     }
 
+    // Force app-wide background/text colors so they stay consistent across all screens
+    // (including when dynamic color is enabled).
+    val forcedColorScheme =
+        colorScheme.copy(
+            background = AppBackground,
+            onBackground = AppText,
+            surface = AppBackground,
+            onSurface = AppText,
+            surfaceVariant = AppBackground,
+            onSurfaceVariant = AppText,
+            surfaceContainerLow = AppBackground,
+            surfaceContainer = AppBackground,
+            surfaceContainerHigh = AppBackground,
+            onPrimary = AppText,
+            onSecondary = AppText,
+            onTertiary = AppText,
+            onPrimaryContainer = AppText,
+            onSecondaryContainer = AppText,
+            onTertiaryContainer = AppText,
+            onError = AppText,
+            onErrorContainer = AppText,
+        )
+
     MaterialTheme(
-        colorScheme = colorScheme,
+        colorScheme = forcedColorScheme,
         typography = Typography,
         content = content
     )
