@@ -1,5 +1,6 @@
 package com.project.habithearth.ui.tasks
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -35,6 +36,7 @@ import com.project.habithearth.data.UserProgressRepository
 import com.project.habithearth.ui.map.defaultVillageBuildings
 import com.project.habithearth.ui.model.TaskCategory
 import com.project.habithearth.ui.state.GameStateViewModel
+import com.project.habithearth.ui.theme.HearthPanelWarm
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -105,6 +107,7 @@ fun TaskMakerScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .background(HearthPanelWarm)
                 .padding(innerPadding)
                 .padding(horizontal = 24.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),

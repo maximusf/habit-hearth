@@ -34,7 +34,7 @@ private val LightColorScheme = lightColorScheme(
     */
 )
 
-private val AppBackground = Color(0xFF0A3323)
+private val AppBackground = HearthBackground
 private val AppText = Color.White
 
 @Composable

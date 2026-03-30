@@ -22,7 +22,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.text.input.KeyboardType
@@ -31,6 +30,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.project.habithearth.data.UserProgressRepository
 import com.project.habithearth.ui.theme.HabitHearthTheme
+import com.project.habithearth.ui.theme.HearthBackground
 import kotlinx.coroutines.launch
 
 @Composable
@@ -50,7 +50,7 @@ fun AccountCreationScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(Color(0xFF0A3323))
+            .background(HearthBackground)
             .verticalScroll(scroll)
             .padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,

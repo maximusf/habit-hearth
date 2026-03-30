@@ -1,5 +1,10 @@
 package com.project.habithearth.ui.map
 
+import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import androidx.compose.foundation.background
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -27,8 +32,11 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -38,6 +46,7 @@ import com.project.habithearth.ui.components.VerticalScrollIndicator
 import com.project.habithearth.ui.state.GameStateViewModel
 import com.project.habithearth.ui.state.GameStateViewModelFactory
 import com.project.habithearth.ui.theme.HabitHearthTheme
+import com.project.habithearth.ui.theme.HearthPanelWarm
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -98,9 +107,36 @@ fun BuildingDetailScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .background(HearthPanelWarm)
                 .padding(innerPadding)
                 .padding(horizontal = 16.dp),
         ) {
+            val context = LocalContext.current
+            val headerAssetPath = remember(buildingId) {
+                markerAssetPathForBuilding(buildingId, 0)
+            }
+            val headerBitmap: ImageBitmap? = remember(headerAssetPath) {
+                decodeBuildingMarkerBitmap(
+                    context = context,
+                    assetPath = headerAssetPath,
+                    maxEdgePx = 256,
+                )
+            }
+
+            if (headerBitmap != null) {
+                Image(
+                    bitmap = headerBitmap,
+                    contentDescription = "${building.name} header",
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(130.dp),
+                    contentScale = ContentScale.Fit,
+                )
+            } else {
+                Spacer(modifier = Modifier.height(130.dp))
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+
             Text(
                 text = building.story,
                 style = MaterialTheme.typography.bodyMedium,
@@ -163,6 +199,37 @@ fun BuildingDetailScreen(
             }
         }
     }
+}
+
+private fun decodeBuildingMarkerBitmap(
+    context: Context,
+    assetPath: String,
+    maxEdgePx: Int,
+): ImageBitmap? {
+    return runCatching {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        context.assets.open(assetPath).use { BitmapFactory.decodeStream(it, null, bounds) }
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return@runCatching null
+
+        val sample = sampleSizeForMaxEdge(bounds.outWidth, bounds.outHeight, maxEdgePx)
+        val decode = BitmapFactory.Options().apply {
+            inSampleSize = sample
+            inScaled = false
+        }
+        context.assets.open(assetPath).use { stream ->
+            BitmapFactory.decodeStream(stream, null, decode)?.asImageBitmap()
+        }
+    }.getOrNull()
+}
+
+private fun sampleSizeForMaxEdge(width: Int, height: Int, maxEdgePx: Int): Int {
+    val longest = maxOf(width, height)
+    if (longest <= maxEdgePx) return 1
+    var sample = 1
+    while (longest / sample > maxEdgePx) {
+        sample *= 2
+    }
+    return sample
 }
 
 //@Preview(showBackground = true, showSystemUi = true)

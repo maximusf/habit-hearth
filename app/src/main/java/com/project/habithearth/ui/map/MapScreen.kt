@@ -7,23 +7,21 @@ import android.graphics.BitmapFactory
 import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.rememberTransformableState
 import androidx.compose.foundation.gestures.transformable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -37,20 +35,19 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.project.habithearth.ui.theme.HabitHearthTheme
+import com.project.habithearth.ui.theme.HearthBackground
 
 private val MapMinScale = 1f
 private val MapMaxScale = 4f
 
 /** Asset path under `app/src/main/assets/`. */
 private const val MapBackgroundAssetPath = "images/background_image.png"
-
-private const val MapBuildingAssetPath = "images/building_towers.PNG"
 
 /**
  * Cap decoded size so large map PNGs do not OOM or exceed GPU max texture size when drawn.
@@ -61,7 +58,6 @@ private const val MapBuildingMaxEdgePx = 256
 /** Sized to sit inside one hex cell on the map art; centered on [VillageBuilding] fractions. */
 private val BuildingMarkerWidth = 34.dp
 private val BuildingMarkerHeight = 38.dp
-private val BuildingMarkerIconSize = 16.dp
 
 @Composable
 fun MapScreen(
@@ -83,6 +79,12 @@ fun MapScreen(
     }
 
     val viewport by mapViewModel.viewportState.collectAsState()
+    val density = LocalDensity.current
+    LaunchedEffect(Unit) {
+        mapViewModel.seedInitialViewportIfDefault(
+            MapViewModel.initialViewportForMainBuildings(density),
+        )
+    }
 
     val transformableState = rememberTransformableState { zoomChange, panChange, _ ->
         val nextScale = (viewport.scale * zoomChange).coerceIn(MapMinScale, MapMaxScale)
@@ -116,12 +118,14 @@ fun MapScreen(
             BoxWithConstraints(
                 Modifier
                     .size(1400.dp, 980.dp)
-                    .align(Alignment.Center),
+                    .align(Alignment.TopCenter),
             ) {
                 MapBaseBackground(Modifier.fillMaxSize())
-                buildings.forEach { building ->
+                buildings.forEachIndexed { index, building ->
+                    val assetPath = markerAssetPathForBuilding(building.id, index)
                     BuildingMarker(
                         building = building,
+                        assetPath = assetPath,
                         modifier = Modifier.offset(
                             x = maxWidth * building.xFraction - BuildingMarkerWidth / 2,
                             y = maxHeight * building.yFraction - BuildingMarkerHeight / 2,
@@ -160,7 +164,7 @@ private fun MapBaseBackground(modifier: Modifier = Modifier) {
         Box(
             modifier
                 .fillMaxSize()
-                .background(Color(0xFF0A3323)),
+                .background(HearthBackground),
         )
     }
 }
@@ -190,6 +194,28 @@ private fun decodeMapBackgroundBitmap(
     }.getOrNull()
 }
 
+/** Map building markers — edit paths in [MapBuildingAssets]. */
+private fun decodeMapMarkerBitmap(
+    context: Context,
+    assetPath: String,
+    maxEdgePx: Int,
+): ImageBitmap? {
+    return runCatching {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        context.assets.open(assetPath).use { BitmapFactory.decodeStream(it, null, bounds) }
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return@runCatching null
+
+        val sample = sampleSizeForMaxEdge(bounds.outWidth, bounds.outHeight, maxEdgePx)
+        val decode = BitmapFactory.Options().apply {
+            inSampleSize = sample
+            inScaled = false
+        }
+        context.assets.open(assetPath).use { stream ->
+            BitmapFactory.decodeStream(stream, null, decode)?.asImageBitmap()
+        }
+    }.getOrNull()
+}
+
 private fun sampleSizeForMaxEdge(width: Int, height: Int, maxEdgePx: Int): Int {
     val longest = maxOf(width, height)
     if (longest <= maxEdgePx) return 1
@@ -204,40 +230,27 @@ private fun sampleSizeForMaxEdge(width: Int, height: Int, maxEdgePx: Int): Int {
 @Composable
 private fun BuildingMarker(
     building: VillageBuilding,
+    assetPath: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
-    val buildingBitmap = remember(MapBuildingAssetPath) {
-        decodeMapBackgroundBitmap(context, MapBuildingAssetPath, MapBuildingMaxEdgePx)
+    val buildingBitmap = remember(assetPath) {
+        decodeMapMarkerBitmap(context, assetPath, MapBuildingMaxEdgePx)
     }
 
-    Surface(
-        onClick = onClick,
-        shape = RoundedCornerShape(6.dp),
-        color = MaterialTheme.colorScheme.secondaryContainer,
-        modifier = modifier.size(BuildingMarkerWidth, BuildingMarkerHeight),
+    Box(
+        modifier = modifier
+            .size(BuildingMarkerWidth, BuildingMarkerHeight)
+            .clickable(onClick = onClick, onClickLabel = building.name),
+        contentAlignment = Alignment.Center,
     ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.padding(horizontal = 2.dp, vertical = 3.dp),
-        ) {
-            if (buildingBitmap != null) {
-                Image(
-                    bitmap = buildingBitmap,
-                    contentDescription = "${building.name} marker",
-                    modifier = Modifier.size(BuildingMarkerIconSize),
-                    contentScale = ContentScale.Crop,
-                )
-            }
-            Text(
-                text = building.shortLabel,
-                style = MaterialTheme.typography.labelSmall,
-                fontSize = 8.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                color = MaterialTheme.colorScheme.onSecondaryContainer,
-                modifier = Modifier.width(BuildingMarkerWidth - 4.dp),
+        if (buildingBitmap != null) {
+            Image(
+                bitmap = buildingBitmap,
+                contentDescription = building.name,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Fit,
             )
         }
     }

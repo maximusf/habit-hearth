@@ -21,7 +21,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -32,6 +31,7 @@ import com.project.habithearth.ui.components.VerticalScrollIndicator
 import com.project.habithearth.ui.state.GameStateViewModel
 import com.project.habithearth.ui.state.GameStateViewModelFactory
 import com.project.habithearth.ui.theme.HabitHearthTheme
+import com.project.habithearth.ui.theme.HearthPanelWarm
 
 @Composable
 fun HomeScreen(
@@ -47,7 +47,7 @@ fun HomeScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(Color(0xFF0A3323))
+            .background(HearthPanelWarm)
             .padding(horizontal = 16.dp),
     ) {
         Text(

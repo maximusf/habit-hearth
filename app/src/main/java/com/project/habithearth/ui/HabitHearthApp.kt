@@ -1,6 +1,9 @@
 package com.project.habithearth.ui
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.calculateEndPadding
+import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.CircularProgressIndicator
@@ -19,8 +22,12 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.dp
+import androidx.compose.material3.NavigationBarItemDefaults
+import com.project.habithearth.ui.theme.HearthBackground
+import com.project.habithearth.ui.theme.HearthPanelWarm
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -92,7 +99,8 @@ fun HabitHearthApp(modifier: Modifier = Modifier) {
             route.startsWith("task_maker/building/") ||
             (route.startsWith("task_maker/") && !route.startsWith("task_maker/building/"))
     val isBuildingDetail = route.startsWith("building_detail/")
-    val hideMainChrome = isTaskMaker || isBuildingDetail
+    // Keep resource bar + bottom navigation visible on building detail screens.
+    val hideMainChrome = isTaskMaker
     val isHome = current?.route == AppDestination.Home.route
 
     LaunchedEffect(isHome) {
@@ -169,8 +177,8 @@ fun HabitHearthApp(modifier: Modifier = Modifier) {
                     bottomBar = {
                         if (!hideMainChrome) {
                         NavigationBar(
-                            containerColor = Color(0xFFC9A227),
-                            contentColor = Color.White,
+                            containerColor = HearthPanelWarm,
+                            contentColor = HearthBackground,
                         ) {
                                 AppDestination.entries.forEach { destination ->
                                     val selected =
@@ -180,10 +188,16 @@ fun HabitHearthApp(modifier: Modifier = Modifier) {
                                             Icon(
                                                 imageVector = destination.icon,
                                                 contentDescription = destination.label,
-                                            tint = Color.White,
                                             )
                                         },
-                                    label = { Text(destination.label, color = Color.White) },
+                                        label = { Text(destination.label) },
+                                        colors = NavigationBarItemDefaults.colors(
+                                            selectedIconColor = HearthBackground,
+                                            selectedTextColor = HearthBackground,
+                                            unselectedIconColor = HearthBackground,
+                                            unselectedTextColor = HearthBackground,
+                                            indicatorColor = HearthBackground.copy(alpha = 0.18f),
+                                        ),
                                         selected = selected,
                                         onClick = {
                                             navController.navigate(destination.route) {
@@ -200,10 +214,22 @@ fun HabitHearthApp(modifier: Modifier = Modifier) {
                         }
                     },
                 ) { innerPadding ->
+                    val layoutDirection = LocalLayoutDirection.current
+                    val navPadding =
+                        if (route == AppDestination.Map.route) {
+                            PaddingValues(
+                                start = innerPadding.calculateStartPadding(layoutDirection),
+                                top = 0.dp,
+                                end = innerPadding.calculateEndPadding(layoutDirection),
+                                bottom = innerPadding.calculateBottomPadding(),
+                            )
+                        } else {
+                            innerPadding
+                        }
                     NavHost(
                         navController = navController,
                         startDestination = AppDestination.Home.route,
-                        modifier = Modifier.padding(innerPadding),
+                        modifier = Modifier.padding(navPadding),
                     ) {
                         composable(
                             route = BuildingDetailRoute,

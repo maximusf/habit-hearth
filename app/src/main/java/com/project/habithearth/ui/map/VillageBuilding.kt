@@ -25,6 +25,15 @@ data class VillageBuilding(
 fun villageBuildingById(id: String): VillageBuilding? =
     defaultVillageBuildings().find { it.id == id }
 
+/** Hearth / guild hub — used for default map zoom framing. */
+val MainHubBuildingIds: Set<String> = setOf(
+    "library",
+    "cottage",
+    "spa",
+    "guild",
+    "greenhouse",
+)
+
 /**
  * Hex-style grid on the map (same spacing as your tuned rows):
  * - **Wide row** (3 sites): `x` = `0.326`, `0.5`, `0.687`
