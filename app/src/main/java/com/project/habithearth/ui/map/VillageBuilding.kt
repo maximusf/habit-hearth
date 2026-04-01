@@ -25,7 +25,10 @@ data class VillageBuilding(
 fun villageBuildingById(id: String): VillageBuilding? =
     defaultVillageBuildings().find { it.id == id }
 
-/** Hearth / guild hub — used for default map zoom framing. */
+/**
+ * Hub buildings unlocked at the start of a new game (home + wisdom, strength, vitality, spirit anchors).
+ * Also used for default map zoom framing.
+ */
 val MainHubBuildingIds: Set<String> = setOf(
     "library",
     "cottage",

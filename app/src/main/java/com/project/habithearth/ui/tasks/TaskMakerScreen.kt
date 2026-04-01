@@ -58,6 +58,18 @@ fun TaskMakerScreen(
     var buildingExpanded by remember { mutableStateOf(false) }
     var selectedBuildingId by remember(taskId) { mutableStateOf<String?>(null) }
     val villageBuildings = remember { defaultVillageBuildings() }
+    val ownedBuildings = remember(game.ownedBuildingIds) {
+        villageBuildings.filter { it.id in game.ownedBuildingIds }
+    }
+    val buildingsForDropdown = remember(ownedBuildings, existingTask?.buildingId) {
+        val orphanId = existingTask?.buildingId
+        val orphan = orphanId?.let { id -> villageBuildings.find { it.id == id } }
+        if (orphan != null && orphan.id !in game.ownedBuildingIds) {
+            ownedBuildings + orphan
+        } else {
+            ownedBuildings
+        }
+    }
 
     LaunchedEffect(taskId, game.tasks) {
         if (taskId != null && game.tasks.none { it.id == taskId }) {
@@ -84,7 +96,17 @@ fun TaskMakerScreen(
             title = ""
             note = ""
             selectedCategory = TaskCategory.UNSORTED
-            selectedBuildingId = initialBuildingId
+            selectedBuildingId =
+                initialBuildingId?.takeIf { it in game.ownedBuildingIds }
+        }
+    }
+
+    LaunchedEffect(game.ownedBuildingIds, taskId) {
+        if (taskId == null) {
+            val sid = selectedBuildingId
+            if (sid != null && sid !in game.ownedBuildingIds) {
+                selectedBuildingId = null
+            }
         }
     }
 
@@ -196,13 +218,13 @@ fun TaskMakerScreen(
                     onDismissRequest = { buildingExpanded = false },
                 ) {
                     DropdownMenuItem(
-                        text = { Text("Home (not on map)") },
+                        text = { Text("Home (not filed to a building)") },
                         onClick = {
                             selectedBuildingId = null
                             buildingExpanded = false
                         },
                     )
-                    villageBuildings.forEach { building ->
+                    buildingsForDropdown.forEach { building ->
                         DropdownMenuItem(
                             text = { Text("${building.shortLabel} — ${building.name}") },
                             onClick = {

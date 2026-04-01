@@ -17,19 +17,23 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
@@ -40,6 +44,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.project.habithearth.ui.state.GameUiState
 import com.project.habithearth.ui.theme.HabitHearthTheme
 import com.project.habithearth.ui.theme.HearthBackground
 
@@ -53,15 +58,18 @@ private const val MapBackgroundAssetPath = "images/background_image.png"
  * Cap decoded size so large map PNGs do not OOM or exceed GPU max texture size when drawn.
  */
 private const val MapBackgroundMaxEdgePx = 2048
-private const val MapBuildingMaxEdgePx = 256
+private const val MapBuildingMaxEdgePx = 384
 
 /** Sized to sit inside one hex cell on the map art; centered on [VillageBuilding] fractions. */
-private val BuildingMarkerWidth = 34.dp
-private val BuildingMarkerHeight = 38.dp
+private val BuildingMarkerWidth = 50.dp
+private val BuildingMarkerHeight = 56.dp
 
 @Composable
 fun MapScreen(
+    ownedBuildingIds: Set<String>,
+    gameUiState: GameUiState,
     onOpenBuilding: (VillageBuilding) -> Unit,
+    onPurchaseBuilding: (String) -> Boolean,
     modifier: Modifier = Modifier,
     mapViewModel: MapViewModel = viewModel(),
 ) {
@@ -96,6 +104,40 @@ fun MapScreen(
     }
 
     val buildings = remember { defaultVillageBuildings() }
+    var pendingUnlock by remember { mutableStateOf<VillageBuilding?>(null) }
+
+    pendingUnlock?.let { building ->
+        val cost = building.unlockCost()
+        val canAfford = gameUiState.canAfford(cost)
+        AlertDialog(
+            onDismissRequest = { pendingUnlock = null },
+            title = { Text(building.name) },
+            text = {
+                Text(
+                    text = "Unlock this building for ${cost.displayLabel()}.\n\nYou currently " +
+                        if (canAfford) "have enough to buy." else "don’t have enough.",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        if (onPurchaseBuilding(building.id)) {
+                            pendingUnlock = null
+                        }
+                    },
+                    enabled = canAfford,
+                ) {
+                    Text("Buy")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingUnlock = null }) {
+                    Text("Cancel")
+                }
+            },
+        )
+    }
 
     Box(
         modifier
@@ -126,18 +168,25 @@ fun MapScreen(
                     BuildingMarker(
                         building = building,
                         assetPath = assetPath,
+                        locked = building.id !in ownedBuildingIds,
                         modifier = Modifier.offset(
                             x = maxWidth * building.xFraction - BuildingMarkerWidth / 2,
                             y = maxHeight * building.yFraction - BuildingMarkerHeight / 2,
                         ),
-                        onClick = { onOpenBuilding(building) },
+                        onClick = {
+                            if (building.id in ownedBuildingIds) {
+                                onOpenBuilding(building)
+                            } else {
+                                pendingUnlock = building
+                            }
+                        },
                     )
                 }
             }
         }
 
         Text(
-            text = "Pinch to zoom · drag to pan · tap a building to open it",
+            text = "Pinch to zoom · drag to pan · tap a building to explore or unlock",
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier
@@ -231,6 +280,7 @@ private fun sampleSizeForMaxEdge(width: Int, height: Int, maxEdgePx: Int): Int {
 private fun BuildingMarker(
     building: VillageBuilding,
     assetPath: String,
+    locked: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -246,11 +296,17 @@ private fun BuildingMarker(
         contentAlignment = Alignment.Center,
     ) {
         if (buildingBitmap != null) {
+            val colorFilter = if (locked) {
+                ColorFilter.colorMatrix(ColorMatrix().apply { setToSaturation(0f) })
+            } else {
+                null
+            }
             Image(
                 bitmap = buildingBitmap,
                 contentDescription = building.name,
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Fit,
+                colorFilter = colorFilter,
             )
         }
     }

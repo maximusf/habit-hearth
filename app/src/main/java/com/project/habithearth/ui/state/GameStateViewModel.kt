@@ -4,6 +4,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.project.habithearth.data.UserProgressRepository
+import com.project.habithearth.ui.map.unlockCost
+import com.project.habithearth.ui.map.villageBuildingById
+import com.project.habithearth.ui.map.canAfford
+import com.project.habithearth.ui.map.MainHubBuildingIds
+import com.project.habithearth.ui.map.withUnlockCostPaid
 import com.project.habithearth.ui.model.HabitTask
 import com.project.habithearth.ui.model.TaskCategory
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -20,6 +25,8 @@ data class GameUiState(
     val coins: Int = 240,
     val xpProgress: Float = 0.62f,
     val tasks: List<HabitTask> = defaultSeedTasks(),
+    /** Map buildings the player has unlocked (starter hubs are merged in when loading a save). */
+    val ownedBuildingIds: Set<String> = emptySet(),
 )
 
 class GameStateViewModel(
@@ -122,6 +129,25 @@ class GameStateViewModel(
             TaskCategory.SPIRIT -> copy(spiritGems = (spiritGems + delta).coerceAtLeast(0))
             TaskCategory.UNSORTED -> copy(coins = (coins + delta).coerceAtLeast(0))
         }
+    }
+
+    /**
+     * Unlocks a map building if the player can pay its category cost (see `VillageBuildingUnlockCost`).
+     * Starter hub buildings are always owned (no charge).
+     */
+    fun tryPurchaseBuilding(buildingId: String): Boolean {
+        val building = villageBuildingById(buildingId) ?: return false
+        val current = _uiState.value
+        if (building.id in current.ownedBuildingIds) return true
+        val cost = building.unlockCost()
+        if (!current.canAfford(cost)) return false
+        _uiState.update { s ->
+            if (building.id in s.ownedBuildingIds) return@update s
+            if (!s.canAfford(cost)) return@update s
+            s.withUnlockCostPaid(cost).copy(ownedBuildingIds = s.ownedBuildingIds + building.id)
+        }
+        persist()
+        return true
     }
 }
 

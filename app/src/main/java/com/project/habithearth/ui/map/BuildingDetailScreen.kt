@@ -32,6 +32,8 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.Modifier
@@ -60,6 +62,7 @@ fun BuildingDetailScreen(
 ) {
     val game by gameStateViewModel.uiState.collectAsState()
     val building = villageBuildingById(buildingId)
+    val owned = buildingId in game.ownedBuildingIds
     val tasksInBuilding = game.tasks.filter { it.buildingId == buildingId }
     val scrollState = rememberScrollState()
 
@@ -124,6 +127,11 @@ fun BuildingDetailScreen(
             }
 
             if (headerBitmap != null) {
+                val lockedFilter = if (!owned) {
+                    ColorFilter.colorMatrix(ColorMatrix().apply { setToSaturation(0f) })
+                } else {
+                    null
+                }
                 Image(
                     bitmap = headerBitmap,
                     contentDescription = "${building.name} header",
@@ -131,71 +139,90 @@ fun BuildingDetailScreen(
                         .fillMaxWidth()
                         .height(130.dp),
                     contentScale = ContentScale.Fit,
+                    colorFilter = lockedFilter,
                 )
             } else {
                 Spacer(modifier = Modifier.height(130.dp))
             }
             Spacer(modifier = Modifier.height(8.dp))
 
-            Text(
-                text = building.story,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
-            Text(
-                text = "Habits filed here",
-                style = MaterialTheme.typography.titleMedium,
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth(),
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(end = 14.dp)
-                        .verticalScroll(scrollState),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    if (tasksInBuilding.isEmpty()) {
-                        Text(
-                            text = "No habits in this building yet. Add one to file it here.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    } else {
-                        tasksInBuilding.forEach { task ->
-                            HabitTaskRowCard(
-                                task = task,
-                                onCompletedChange = { checked ->
-                                    gameStateViewModel.setTaskCompleted(task.id, checked)
-                                },
-                                onOpenEdit = { onEditTask(task.id) },
-                            )
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(8.dp))
-                }
-                VerticalScrollIndicator(
-                    scrollState = scrollState,
-                    modifier = Modifier
-                        .align(Alignment.CenterEnd)
-                        .fillMaxHeight()
-                        .padding(vertical = 4.dp),
+            if (!owned) {
+                val cost = building.unlockCost()
+                val canAfford = game.canAfford(cost)
+                Text(
+                    text = "This building is locked. Purchase it for ${cost.displayLabel()} to open the full story and habits here.",
+                    style = MaterialTheme.typography.bodyLarge,
                 )
-            }
+                Spacer(modifier = Modifier.height(12.dp))
+                Button(
+                    onClick = { gameStateViewModel.tryPurchaseBuilding(buildingId) },
+                    enabled = canAfford,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Buy (${cost.displayLabel()})")
+                }
+                Spacer(modifier = Modifier.weight(1f))
+            } else {
+                Text(
+                    text = building.story,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+                Text(
+                    text = "Habits filed here",
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                Spacer(modifier = Modifier.height(8.dp))
 
-            Button(
-                onClick = { onAddHabitInBuilding(buildingId) },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 12.dp, bottom = 8.dp),
-            ) {
-                Text("Add habit to this building")
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(end = 14.dp)
+                            .verticalScroll(scrollState),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        if (tasksInBuilding.isEmpty()) {
+                            Text(
+                                text = "No habits in this building yet. Add one to file it here.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        } else {
+                            tasksInBuilding.forEach { task ->
+                                HabitTaskRowCard(
+                                    task = task,
+                                    onCompletedChange = { checked ->
+                                        gameStateViewModel.setTaskCompleted(task.id, checked)
+                                    },
+                                    onOpenEdit = { onEditTask(task.id) },
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+                    VerticalScrollIndicator(
+                        scrollState = scrollState,
+                        modifier = Modifier
+                            .align(Alignment.CenterEnd)
+                            .fillMaxHeight()
+                            .padding(vertical = 4.dp),
+                    )
+                }
+
+                Button(
+                    onClick = { onAddHabitInBuilding(buildingId) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 12.dp, bottom = 8.dp),
+                ) {
+                    Text("Add habit to this building")
+                }
             }
         }
     }

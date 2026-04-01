@@ -254,8 +254,13 @@ fun HabitHearthApp(modifier: Modifier = Modifier) {
                         }
                         composable(AppDestination.Map.route) {
                             MapScreen(
+                                ownedBuildingIds = game.ownedBuildingIds,
+                                gameUiState = game,
                                 onOpenBuilding = { building ->
                                     navController.navigate("building_detail/${building.id}")
+                                },
+                                onPurchaseBuilding = { buildingId ->
+                                    gameVm.tryPurchaseBuilding(buildingId)
                                 },
                             )
                         }

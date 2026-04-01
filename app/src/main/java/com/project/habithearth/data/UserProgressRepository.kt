@@ -9,7 +9,10 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.google.gson.Gson
+import com.google.gson.JsonArray
+import com.google.gson.JsonParser
 import com.google.gson.reflect.TypeToken
+import com.project.habithearth.ui.map.MainHubBuildingIds
 import com.project.habithearth.ui.state.GameUiState
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -117,6 +120,7 @@ class UserProgressRepository(
                         spiritGems = 0,
                         coins = 0,
                         xpProgress = 0f,
+                        ownedBuildingIds = MainHubBuildingIds,
                     ),
                 )
         }
@@ -211,8 +215,15 @@ class UserProgressRepository(
         val json = dataStore.data.map { it[KEY_GAME_STATE_JSON] }.first()
         if (json.isNullOrBlank()) return null
         return runCatching {
+            val root = JsonParser.parseString(json).asJsonObject
+            val owned = root.get("ownedBuildingIds")
+            if (owned == null || owned.isJsonNull) {
+                val arr = JsonArray()
+                MainHubBuildingIds.forEach { arr.add(it) }
+                root.add("ownedBuildingIds", arr)
+            }
             @Suppress("UNCHECKED_CAST")
-            (gson.fromJson(json, gameStateType) as? GameUiState)
+            (gson.fromJson(root, gameStateType) as? GameUiState)
         }.getOrNull()
     }
 
