@@ -21,7 +21,7 @@ data class StoryUiState(
 class StoryViewModel : ViewModel() {
 
     private val generativeModel = GenerativeModel(
-        modelName = "gemini-2.0-flash",
+        modelName = "gemini-3-flash-preview",
         apiKey = "YOUR_API_KEY"
     )
 
