@@ -23,7 +23,7 @@ private val BuildingMarkerArtById: Map<String, BuildingMarkerArt> = mapOf(
         image = "images/building_towers.PNG",
     ),
     "spa" to BuildingMarkerArt(
-        image = "images/buildings/vitality/hotspring.PNG",
+        image = "images/buildings/vitality/greenhouse.PNG",
     ),
     "guild" to BuildingMarkerArt(
         image = "images/buildings/strength/tower.PNG",
