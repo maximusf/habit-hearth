@@ -2,33 +2,38 @@ package com.project.habithearth.ui.story
 
 import android.content.pm.ActivityInfo
 import androidx.activity.compose.LocalActivity
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import com.project.habithearth.R
-import com.project.habithearth.ui.theme.HabitHearthTheme
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.project.habithearth.ui.state.GameUiState
 
 @Composable
-fun StoryScreen(modifier: Modifier = Modifier) {
+fun StoryScreen(
+    gameState: GameUiState,
+    modifier: Modifier = Modifier,
+    storyViewModel: StoryViewModel = viewModel(),
+) {
     val activity = LocalActivity.current
     DisposableEffect(activity) {
         if (activity == null) {
@@ -42,6 +47,7 @@ fun StoryScreen(modifier: Modifier = Modifier) {
         }
     }
 
+    val storyState by storyViewModel.uiState.collectAsState()
     val scroll = rememberScrollState()
 
     Column(
@@ -51,49 +57,75 @@ fun StoryScreen(modifier: Modifier = Modifier) {
             .padding(24.dp),
     ) {
         Text(
-            text = "Story",
+            text = storyState.chapterTitle,
             style = MaterialTheme.typography.headlineLarge,
         )
-        Text(
-            text = "Landscape reading mode — scroll if the tale runs long.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 8.dp),
-        )
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 20.dp),
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
+
+        Spacer(Modifier.height(12.dp))
+
+        Button(
+            onClick = { storyViewModel.generateStory(gameState) },
+            enabled = !storyState.isLoading,
         ) {
-            Image(
-                painter = painterResource(R.drawable.ic_launcher_foreground),
-                contentDescription = "Story illustration",
-                contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .weight(1f)
-                    .aspectRatio(3f / 4f)
-                    .clip(RoundedCornerShape(12.dp)),
-            )
             Text(
-                text = "The ember at the center of your village remembers every step you take. " +
-                    "Each habit you tend adds another timber to the hearth — not all at once, " +
-                    "but steady, until the whole place glows. " +
-                    "This is where your chronicle will grow: moments beside the fire, " +
-                    "paths through the map, and the small choices that become a life well kept.",
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.weight(1f),
+                if (storyState.isLoading) "The tale unfolds..."
+                else if (storyState.storyText.isEmpty()) "Begin the Story"
+                else "Continue the Story"
             )
+        }
+
+        if (storyState.isLoading) {
+            CircularProgressIndicator(
+                modifier = Modifier
+                    .padding(top = 16.dp)
+                    .align(Alignment.CenterHorizontally),
+            )
+        }
+
+        storyState.errorMessage?.let { error ->
+            Text(
+                text = error,
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(top = 12.dp),
+            )
+        }
+
+        if (storyState.storyText.isNotEmpty()) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 16.dp),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                ),
+            ) {
+                Text(
+                    text = storyState.storyText,
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.padding(16.dp),
+                )
+            }
+        }
+
+        if (storyState.choices.isNotEmpty()) {
+            Text(
+                text = "What do you do?",
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(top = 20.dp, bottom = 8.dp),
+            )
+            storyState.choices.forEach { choice ->
+                OutlinedButton(
+                    onClick = { storyViewModel.makeChoice(choice) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp),
+                    shape = RoundedCornerShape(8.dp),
+                ) {
+                    Text(choice)
+                }
+            }
         }
     }
 }
-
-//@Preview(showBackground = true, showSystemUi = true, device = "spec:parent=pixel_5,orientation=landscape")
-//@Composable
-//private fun StoryScreenPreview() {
-//    HabitHearthTheme {
-//        StoryScreen()
-//    }
-//}

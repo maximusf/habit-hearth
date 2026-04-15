@@ -274,7 +274,7 @@ fun HabitHearthApp(modifier: Modifier = Modifier) {
                                 gameStateViewModel = gameVm,
                             )
                         }
-                        composable(AppDestination.Story.route) { StoryScreen() }
+                        composable(AppDestination.Story.route) { StoryScreen(gameState = game) }
                         composable(AppDestination.Profile.route) {
                             ProfileScreen(
                                 gameUiState = game,
