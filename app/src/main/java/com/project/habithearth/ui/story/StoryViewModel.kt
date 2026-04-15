@@ -3,7 +3,7 @@ package com.project.habithearth.ui.story
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.ai.client.generativeai.GenerativeModel
-import com.project.habithearth.ui.model.TaskCategory
+import com.project.habithearth.BuildConfig
 import com.project.habithearth.ui.state.GameUiState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -22,7 +22,7 @@ class StoryViewModel : ViewModel() {
 
     private val generativeModel = GenerativeModel(
         modelName = "gemini-3-flash-preview",
-        apiKey = "YOUR_API_KEY"
+        apiKey = BuildConfig.GEMINI_API_KEY,
     )
 
     private val _uiState = MutableStateFlow(StoryUiState())
@@ -30,6 +30,13 @@ class StoryViewModel : ViewModel() {
 
     fun generateStory(gameState: GameUiState) {
         viewModelScope.launch {
+            if (!hasGeminiApiKey()) {
+                _uiState.value = _uiState.value.copy(
+                    errorMessage = "Missing Gemini API key. Add GEMINI_API_KEY to local.properties.",
+                )
+                return@launch
+            }
+
             _uiState.value = _uiState.value.copy(isLoading = true, errorMessage = null)
 
             try {
@@ -62,6 +69,13 @@ class StoryViewModel : ViewModel() {
 
     fun makeChoice(choice: String) {
         viewModelScope.launch {
+            if (!hasGeminiApiKey()) {
+                _uiState.value = _uiState.value.copy(
+                    errorMessage = "Missing Gemini API key. Add GEMINI_API_KEY to local.properties.",
+                )
+                return@launch
+            }
+
             _uiState.value = _uiState.value.copy(
                 isLoading = true,
                 choices = emptyList(),
@@ -176,4 +190,6 @@ class StoryViewModel : ViewModel() {
             )
         }
     }
+
+    private fun hasGeminiApiKey(): Boolean = BuildConfig.GEMINI_API_KEY.isNotBlank()
 }
