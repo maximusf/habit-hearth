@@ -1,7 +1,6 @@
 package com.project.habithearth.ui.story
 
 import android.content.pm.ActivityInfo
-import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -19,13 +18,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.project.habithearth.ui.components.LockScreenOrientation
 import com.project.habithearth.ui.state.GameUiState
 
 @Composable
@@ -34,18 +33,7 @@ fun StoryScreen(
     modifier: Modifier = Modifier,
     storyViewModel: StoryViewModel = viewModel(),
 ) {
-    val activity = LocalActivity.current
-    DisposableEffect(activity) {
-        if (activity == null) {
-            onDispose { }
-        } else {
-            val previous = activity.requestedOrientation
-            activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
-            onDispose {
-                activity.requestedOrientation = previous
-            }
-        }
-    }
+    LockScreenOrientation(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE)
 
     val storyState by storyViewModel.uiState.collectAsState()
     val scroll = rememberScrollState()

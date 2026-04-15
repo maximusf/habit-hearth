@@ -4,7 +4,6 @@ import android.content.Context
 import android.content.pm.ActivityInfo
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -22,7 +21,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -44,6 +42,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.project.habithearth.ui.components.LockScreenOrientation
 import com.project.habithearth.ui.state.GameUiState
 import com.project.habithearth.ui.theme.HabitHearthTheme
 import com.project.habithearth.ui.theme.HearthBackground
@@ -73,18 +72,7 @@ fun MapScreen(
     modifier: Modifier = Modifier,
     mapViewModel: MapViewModel = viewModel(),
 ) {
-    val activity = LocalActivity.current
-    DisposableEffect(activity) {
-        if (activity == null) {
-            onDispose { }
-        } else {
-            val previous = activity.requestedOrientation
-            activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
-            onDispose {
-                activity.requestedOrientation = previous
-            }
-        }
-    }
+    LockScreenOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT)
 
     val viewport by mapViewModel.viewportState.collectAsState()
     val density = LocalDensity.current
