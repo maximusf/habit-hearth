@@ -1,6 +1,7 @@
 package com.project.habithearth.ui.navigation
 
 import android.content.Context
+import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import androidx.compose.foundation.Image
@@ -29,6 +30,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.invisibleToUser
@@ -56,6 +58,9 @@ fun TopResourceBar(
     xpProgress: Float = 0.3f,
     modifier: Modifier = Modifier,
 ) {
+    val isLandscape =
+        LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+
     Surface(
         tonalElevation = 3.dp,
         color = MaterialTheme.colorScheme.surfaceContainer,
@@ -67,9 +72,8 @@ fun TopResourceBar(
                 .padding(horizontal = 12.dp, vertical = 10.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            Column(
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
+            if (isLandscape) {
+                // Landscape: single row — gems + coins side by side
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -94,12 +98,6 @@ fun TopResourceBar(
                         assetPath = GemSpiritAssetPath,
                         accessibilityLabel = "Spirit gems",
                     )
-                }
-                // Coins sit below strength; same image + overlaid count as gems.
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
                     GemStat(
                         amount = coins,
                         assetPath = CoinAssetPath,
@@ -110,6 +108,52 @@ fun TopResourceBar(
                         ),
                         decodeMaxEdgePx = CoinAssetMaxEdgePx,
                     )
+                }
+            } else {
+                // Portrait: gems on top row, coins on a second row below
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        GemStat(
+                            amount = strengthGems,
+                            assetPath = GemStrengthAssetPath,
+                            accessibilityLabel = "Strength gems",
+                        )
+                        GemStat(
+                            amount = wisdomGems,
+                            assetPath = GemWisdomAssetPath,
+                            accessibilityLabel = "Wisdom gems",
+                        )
+                        GemStat(
+                            amount = vitalityGems,
+                            assetPath = GemVitalityAssetPath,
+                            accessibilityLabel = "Vitality gems",
+                        )
+                        GemStat(
+                            amount = spiritGems,
+                            assetPath = GemSpiritAssetPath,
+                            accessibilityLabel = "Spirit gems",
+                        )
+                    }
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        GemStat(
+                            amount = coins,
+                            assetPath = CoinAssetPath,
+                            accessibilityLabel = "Coins",
+                            boxModifier = Modifier.size(
+                                width = GemStatSize * 2,
+                                height = GemStatSize,
+                            ),
+                            decodeMaxEdgePx = CoinAssetMaxEdgePx,
+                        )
+                    }
                 }
             }
 
@@ -132,7 +176,7 @@ fun TopResourceBar(
 
 private val GemStatSize = 34.dp
 
-/** Show 0–999 as-is; from 1000 onward use [thousands]k+ (e.g. 1000 → 1k+). */
+/** Show 0–999 as-is; from 1000 onward use [thousands]k+ (e.g. 1000 -> 1k+). */
 private fun formatResourceAmountForGem(amount: Int): String {
     val n = amount.coerceAtLeast(0)
     if (n <= 999) return n.toString()
