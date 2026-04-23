@@ -13,6 +13,6 @@
 .externalNativeBuild
 .cxx
 local.properties
-/.idea/deploymentTargetSelector.xml
-/claude.md
-/agents.md
+.idea\deploymentTargetSelector.xml
+CLAUDE.md
+AGENTS.md
