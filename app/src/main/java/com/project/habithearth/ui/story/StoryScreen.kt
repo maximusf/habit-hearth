@@ -1,6 +1,7 @@
 package com.project.habithearth.ui.story
 
 import android.content.res.Configuration
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -14,13 +15,21 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -49,39 +58,41 @@ fun StoryScreen(
     if (isLandscape) {
         LandscapeStoryLayout(
             storyState = storyState,
-            onGenerate = { storyViewModel.generateStory(gameState) },
+            onBegin = { storyViewModel.beginStory(gameState) },
+            onNext = { storyViewModel.goToNextPage(gameState) },
+            onPrevious = { storyViewModel.goToPreviousPage() },
             onChoice = { storyViewModel.makeChoice(it) },
             modifier = modifier,
         )
     } else {
         PortraitStoryLayout(
             storyState = storyState,
-            onGenerate = { storyViewModel.generateStory(gameState) },
+            onBegin = { storyViewModel.beginStory(gameState) },
+            onNext = { storyViewModel.goToNextPage(gameState) },
+            onPrevious = { storyViewModel.goToPreviousPage() },
             onChoice = { storyViewModel.makeChoice(it) },
             modifier = modifier,
         )
     }
 }
 
-// ── Portrait: vertical stack, everything scrolls together ──
+// ── Portrait: vertical stack, page text scrollable in a fixed card ──
 
 @Composable
 private fun PortraitStoryLayout(
     storyState: StoryUiState,
-    onGenerate: () -> Unit,
+    onBegin: () -> Unit,
+    onNext: () -> Unit,
+    onPrevious: () -> Unit,
     onChoice: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val scroll = rememberScrollState()
-
     Column(
         modifier = modifier
             .fillMaxSize()
-            .verticalScroll(scroll)
             .padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        // Title
         Text(
             text = storyState.chapterTitle,
             style = MaterialTheme.typography.headlineLarge,
@@ -89,9 +100,8 @@ private fun PortraitStoryLayout(
             modifier = Modifier.fillMaxWidth(),
         )
 
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(12.dp))
 
-        // Placeholder image
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -112,73 +122,112 @@ private fun PortraitStoryLayout(
             )
         }
 
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(12.dp))
 
-        // Generate button
-        Button(
-            onClick = onGenerate,
-            enabled = !storyState.isLoading,
+        // Page text — fixed weight, scrollable inside
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f),
+            shape = RoundedCornerShape(12.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+            ),
         ) {
-            Text(
-                if (storyState.isLoading) "The tale unfolds..."
-                else if (storyState.storyText.isEmpty()) "Begin the Story"
-                else "Continue the Story"
-            )
+            if (storyState.pages.isEmpty() && !storyState.isLoading) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = "Your story awaits...",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                    )
+                }
+            } else {
+                val scroll = rememberScrollState()
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(scroll)
+                        .padding(16.dp),
+                ) {
+                    storyState.currentPage?.let { page ->
+                        Text(
+                            text = page.text,
+                            style = MaterialTheme.typography.bodyLarge,
+                        )
+                    }
+                    if (storyState.isOnChoicePage) {
+                        Spacer(Modifier.height(20.dp))
+                        Text(
+                            text = "What do you do?",
+                            style = MaterialTheme.typography.titleMedium,
+                            modifier = Modifier.fillMaxWidth(),
+                            textAlign = TextAlign.Center,
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        storyState.currentPage?.choices?.forEach { choice ->
+                            OutlinedButton(
+                                onClick = { onChoice(choice) },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp),
+                                shape = RoundedCornerShape(8.dp),
+                                enabled = !storyState.isLoading,
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    contentColor = MaterialTheme.colorScheme.onSurface,
+                                ),
+                                border = BorderStroke(
+                                    width = 1.5.dp,
+                                    color = MaterialTheme.colorScheme.outline,
+                                ),
+                            ) {
+                                Text(
+                                    text = choice,
+                                    textAlign = TextAlign.Center,
+                                )
+                            }
+                        }
+                        Spacer(Modifier.height(8.dp))
+                    }
+                }
+            }
         }
 
+        Spacer(Modifier.height(12.dp))
+
+        // Status row: loading or error
         if (storyState.isLoading) {
-            CircularProgressIndicator(
-                modifier = Modifier.padding(top = 12.dp),
-            )
+            CircularProgressIndicator(modifier = Modifier.size(32.dp))
+            Spacer(Modifier.height(8.dp))
         }
-
         storyState.errorMessage?.let { error ->
             Text(
                 text = error,
                 color = MaterialTheme.colorScheme.error,
                 style = MaterialTheme.typography.bodySmall,
                 textAlign = TextAlign.Center,
-                modifier = Modifier.padding(top = 8.dp),
             )
+            Spacer(Modifier.height(8.dp))
         }
 
-        // Story text card
-        if (storyState.storyText.isNotEmpty()) {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 16.dp),
-                shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                ),
+        // Bottom controls: begin / navigation (choices live inside the card now)
+        if (storyState.pages.isEmpty()) {
+            Button(
+                onClick = onBegin,
+                enabled = !storyState.isLoading,
             ) {
-                Text(
-                    text = storyState.storyText,
-                    style = MaterialTheme.typography.bodyLarge,
-                    modifier = Modifier.padding(16.dp),
-                )
+                Text(if (storyState.isLoading) "The tale unfolds..." else "Begin the Story")
             }
-        }
-
-        // Choices
-        if (storyState.choices.isNotEmpty()) {
-            Text(
-                text = "What do you do?",
-                style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.padding(top = 20.dp, bottom = 8.dp),
+        } else if (!storyState.isOnChoicePage) {
+            PageNavigation(
+                storyState = storyState,
+                onPrevious = onPrevious,
+                onNext = onNext,
             )
-            storyState.choices.forEach { choice ->
-                OutlinedButton(
-                    onClick = { onChoice(choice) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 4.dp),
-                    shape = RoundedCornerShape(8.dp),
-                ) {
-                    Text(choice)
-                }
-            }
         }
     }
 }
@@ -188,89 +237,89 @@ private fun PortraitStoryLayout(
 @Composable
 private fun LandscapeStoryLayout(
     storyState: StoryUiState,
-    onGenerate: () -> Unit,
+    onBegin: () -> Unit,
+    onNext: () -> Unit,
+    onPrevious: () -> Unit,
     onChoice: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val storyScroll = rememberScrollState()
-
     Row(
         modifier = modifier
             .fillMaxSize()
-            .padding(24.dp),
-        horizontalArrangement = Arrangement.spacedBy(24.dp),
+            .padding(16.dp),
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        // Left page: Title + Image + Button
+        // Left page: title + illustration + page indicator + prev arrow
         Column(
             modifier = Modifier
-                .weight(1f)
+                .weight(0.45f)
                 .fillMaxHeight(),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Top,
+            verticalArrangement = Arrangement.SpaceBetween,
         ) {
-            Text(
-                text = storyState.chapterTitle,
-                style = MaterialTheme.typography.headlineLarge,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth(),
-            )
-
-            Spacer(Modifier.height(16.dp))
-
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
-                    .border(
-                        width = 1.dp,
-                        color = MaterialTheme.colorScheme.outline,
-                        shape = RoundedCornerShape(12.dp),
-                    ),
-                contentAlignment = Alignment.Center,
-            ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
-                    text = "Illustration",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    text = storyState.chapterTitle,
+                    style = MaterialTheme.typography.headlineMedium,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth(),
                 )
+
+                Spacer(Modifier.height(8.dp))
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(4f / 3f)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                        .border(
+                            width = 1.dp,
+                            color = MaterialTheme.colorScheme.outline,
+                            shape = RoundedCornerShape(12.dp),
+                        ),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = "Illustration",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
 
-            Spacer(Modifier.height(16.dp))
-
-            Button(
-                onClick = onGenerate,
-                enabled = !storyState.isLoading,
-            ) {
-                Text(
-                    if (storyState.isLoading) "The tale unfolds..."
-                    else if (storyState.storyText.isEmpty()) "Begin the Story"
-                    else "Continue the Story"
-                )
+            // Page indicator + prev button at bottom of left page
+            if (storyState.pages.isNotEmpty()) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center,
+                ) {
+                    IconButton(
+                        onClick = onPrevious,
+                        enabled = storyState.canGoBack && !storyState.isLoading,
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Previous page",
+                        )
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = "${storyState.currentPageIndex + 1} / ${storyState.pages.size}",
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                }
             }
 
             if (storyState.isLoading) {
-                CircularProgressIndicator(
-                    modifier = Modifier.padding(top = 12.dp),
-                )
-            }
-
-            storyState.errorMessage?.let { error ->
-                Text(
-                    text = error,
-                    color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.bodySmall,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(top = 8.dp),
-                )
+                CircularProgressIndicator(modifier = Modifier.size(28.dp))
             }
         }
 
-        // Right page: Scrollable story text + choices
+        // Right page: story text (scrollable) + choices or next arrow
         Card(
             modifier = Modifier
-                .weight(1f)
+                .weight(0.55f)
                 .fillMaxHeight(),
             shape = RoundedCornerShape(12.dp),
             colors = CardDefaults.cardColors(
@@ -280,51 +329,154 @@ private fun LandscapeStoryLayout(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .verticalScroll(storyScroll)
                     .padding(16.dp),
             ) {
-                if (storyState.storyText.isEmpty()) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            text = "Your story will appear here...",
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            textAlign = TextAlign.Center,
-                        )
+                // Story text — scrollable, takes all space above controls
+                Box(modifier = Modifier.weight(1f)) {
+                    if (storyState.pages.isEmpty() && !storyState.isLoading) {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = "Your story awaits...",
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center,
+                            )
+                        }
+                    } else {
+                        val scroll = rememberScrollState()
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .verticalScroll(scroll),
+                        ) {
+                            storyState.currentPage?.let { page ->
+                                Text(
+                                    text = page.text,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                )
+                            }
+                            if (storyState.isOnChoicePage) {
+                                Spacer(Modifier.height(16.dp))
+                                Text(
+                                    text = "What do you do?",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    textAlign = TextAlign.Center,
+                                )
+                                Spacer(Modifier.height(8.dp))
+                                storyState.currentPage?.choices?.forEach { choice ->
+                                    OutlinedButton(
+                                        onClick = { onChoice(choice) },
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(vertical = 2.dp),
+                                        shape = RoundedCornerShape(8.dp),
+                                        enabled = !storyState.isLoading,
+                                        colors = ButtonDefaults.outlinedButtonColors(
+                                            contentColor = MaterialTheme.colorScheme.onSurface,
+                                        ),
+                                        border = BorderStroke(
+                                            width = 1.5.dp,
+                                            color = MaterialTheme.colorScheme.outline,
+                                        ),
+                                    ) {
+                                        Text(
+                                            text = choice,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            textAlign = TextAlign.Center,
+                                        )
+                                    }
+                                }
+                                Spacer(Modifier.height(8.dp))
+                            }
+                        }
                     }
-                } else {
-                    Text(
-                        text = storyState.storyText,
-                        style = MaterialTheme.typography.bodyLarge,
-                    )
                 }
 
-                if (storyState.choices.isNotEmpty()) {
-                    Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(8.dp))
 
+                storyState.errorMessage?.let { error ->
                     Text(
-                        text = "What do you do?",
-                        style = MaterialTheme.typography.titleMedium,
-                        modifier = Modifier.padding(bottom = 8.dp),
+                        text = error,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
                     )
-                    storyState.choices.forEach { choice ->
-                        OutlinedButton(
-                            onClick = { onChoice(choice) },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 4.dp),
-                            shape = RoundedCornerShape(8.dp),
+                    Spacer(Modifier.height(4.dp))
+                }
+
+                // Bottom controls on right page (choices live in the scroll area now)
+                when {
+                    storyState.pages.isEmpty() -> {
+                        Button(
+                            onClick = onBegin,
+                            enabled = !storyState.isLoading,
+                            modifier = Modifier.align(Alignment.CenterHorizontally),
                         ) {
-                            Text(choice)
+                            Text(if (storyState.isLoading) "The tale unfolds..." else "Begin the Story")
+                        }
+                    }
+                    !storyState.isOnChoicePage -> {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End,
+                        ) {
+                            IconButton(
+                                onClick = onNext,
+                                enabled = !storyState.isLoading && !storyState.hasShownEnding,
+                            ) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                                    contentDescription = "Next page",
+                                )
+                            }
                         }
                     }
                 }
             }
+        }
+    }
+}
+
+// ── Shared navigation row for portrait ──
+
+@Composable
+private fun PageNavigation(
+    storyState: StoryUiState,
+    onPrevious: () -> Unit,
+    onNext: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        IconButton(
+            onClick = onPrevious,
+            enabled = storyState.canGoBack && !storyState.isLoading,
+        ) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                contentDescription = "Previous page",
+            )
+        }
+
+        Text(
+            text = "${storyState.currentPageIndex + 1} / ${storyState.pages.size}",
+            style = MaterialTheme.typography.labelLarge,
+        )
+
+        IconButton(
+            onClick = onNext,
+            enabled = !storyState.isLoading && !storyState.hasShownEnding,
+        ) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                contentDescription = "Next page",
+            )
         }
     }
 }
