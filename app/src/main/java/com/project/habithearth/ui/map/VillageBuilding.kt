@@ -45,6 +45,68 @@ val MainHubBuildingIds: Set<String> = setOf(
  */
 fun defaultVillageBuildings(): List<VillageBuilding> = listOf(
     // --- y = 0.08 wide row (outer columns; center hex empty on art) ---
+
+    //main 5 buildings
+
+    VillageBuilding(
+        id = "cottage",
+        name = "Your Cottage",
+        story = "Smoke curls from the chimney. This is home base—tasks pinned by the door, a chair by the fire for when the day is done.",
+//        xFraction = 0.5f,
+//        yFraction = 0.44f,
+        xFraction = 0.513f,
+        yFraction = 0.62f,
+        shortLabel = "Home",
+        category = TaskCategory.UNSORTED,
+    ),
+    VillageBuilding(
+        id = "library",
+        name = "Quiet Stacks",
+        story = "Dust motes float in sunbeams. Here you sketch tomorrow’s routines in the margins of borrowed books. No one rushes you.",
+//        xFraction = 0.326f,
+//        yFraction = 0.44f,
+        xFraction = 0.326f,
+        yFraction = 0.62f,
+        shortLabel = "Library",
+        category = TaskCategory.WISDOM,
+    ),
+    VillageBuilding(
+        id = "greenhouse",
+        name = "The Hearth Bakery",
+        story = "Locals swap tales of streaks kept and habits broken. The keeper nods when you pass—your name is already on the board for tonight’s round.",
+
+//        xFraction = 0.5f,
+//        yFraction = 0.44f,
+        xFraction = 0.6f,
+        yFraction = 0.53f,
+        shortLabel = "Tavern",
+        category = TaskCategory.VITALITY,
+    ),
+    VillageBuilding(
+        id = "guild",
+        name = "Habit Guild Hall",
+        story = "Charts cover the walls: who watered the plants, who walked at dawn. Join a pledge, or start your own—every small win echoes in this hall.",
+        xFraction = 0.4f,
+        yFraction = 0.53f,
+        shortLabel = "Guild",
+        category = TaskCategory.STRENGTH,
+    ),
+    VillageBuilding(
+        id = "spa",
+        name = "The Healing Spa",
+        story = "They say wishes dropped here return as reminders at just the right hour. You hear water far below—steady, patient.",
+//        xFraction = 0.687f,
+//        yFraction = 0.44f,
+        xFraction = 0.687f,
+        yFraction = 0.62f,
+        shortLabel = "Well",
+        category = TaskCategory.SPIRIT,
+    ),
+
+
+    //end of main buildings
+
+
     VillageBuilding(
         id = "lookout_post",
         name = "North Lookout",
@@ -54,6 +116,7 @@ fun defaultVillageBuildings(): List<VillageBuilding> = listOf(
         shortLabel = "Lookout",
         category = TaskCategory.STRENGTH,
     ),
+
     VillageBuilding(
         id = "apiary",
         name = "Sunny Apiary",
@@ -130,49 +193,19 @@ fun defaultVillageBuildings(): List<VillageBuilding> = listOf(
         category = TaskCategory.STRENGTH,
     ),
     // --- y = 0.44 wide (original row) ---
-    VillageBuilding(
-        id = "library",
-        name = "Quiet Stacks",
-        story = "Dust motes float in sunbeams. Here you sketch tomorrow’s routines in the margins of borrowed books. No one rushes you.",
-        xFraction = 0.326f,
-        yFraction = 0.44f,
-        shortLabel = "Library",
-        category = TaskCategory.WISDOM,
-    ),
-    VillageBuilding(
-        id = "cottage",
-        name = "Your Cottage",
-        story = "Smoke curls from the chimney. This is home base—tasks pinned by the door, a chair by the fire for when the day is done.",
-        xFraction = 0.5f,
-        yFraction = 0.44f,
-        shortLabel = "Home",
-        category = TaskCategory.UNSORTED,
-    ),
-    VillageBuilding(
-        id = "spa",
-        name = "The Healing Spa",
-        story = "They say wishes dropped here return as reminders at just the right hour. You hear water far below—steady, patient.",
-        xFraction = 0.687f,
-        yFraction = 0.44f,
-        shortLabel = "Well",
-        category = TaskCategory.SPIRIT,
-    ),
+
+
+
     // --- y = 0.53 narrow (original row) ---
-    VillageBuilding(
-        id = "guild",
-        name = "Habit Guild Hall",
-        story = "Charts cover the walls: who watered the plants, who walked at dawn. Join a pledge, or start your own—every small win echoes in this hall.",
-        xFraction = 0.4f,
-        yFraction = 0.53f,
-        shortLabel = "Guild",
-        category = TaskCategory.STRENGTH,
-    ),
+
     VillageBuilding(
         id = "guild2",
         name = "Habit Annex",
         story = "Spillover from the main hall—quiet desks for planning the week. Someone always leaves a spare quill.",
-        xFraction = 0.6f,
-        yFraction = 0.53f,
+//        xFraction = 0.6f,
+//        yFraction = 0.53f,
+        xFraction = 0.5f,
+        yFraction = 0.44f,
         shortLabel = "Annex",
         category = TaskCategory.STRENGTH,
     ),
@@ -181,26 +214,22 @@ fun defaultVillageBuildings(): List<VillageBuilding> = listOf(
         id = "market_stall",
         name = "Ribbon Market",
         story = "Stalls trade ribbons for completed chores—colors by category. Gaudy, cheerful, impossible to ignore on a good day.",
+//        xFraction = 0.326f,
+//        yFraction = 0.62f,
         xFraction = 0.326f,
-        yFraction = 0.62f,
+        yFraction = 0.44f,
         shortLabel = "Market",
         category = TaskCategory.UNSORTED,
     ),
-    VillageBuilding(
-        id = "greenhouse",
-        name = "The Hearth Greenhouse",
-        story = "Locals swap tales of streaks kept and habits broken. The keeper nods when you pass—your name is already on the board for tonight’s round.",
-        xFraction = 0.513f,
-        yFraction = 0.62f,
-        shortLabel = "Tavern",
-        category = TaskCategory.VITALITY,
-    ),
+
     VillageBuilding(
         id = "workshop",
         name = "Tinker Workshop",
         story = "Gears, glue, and half-finished projects. The motto carved over the door: good enough today beats perfect never.",
+//        xFraction = 0.687f,
+//        yFraction = 0.62f,
         xFraction = 0.687f,
-        yFraction = 0.62f,
+        yFraction = 0.44f,
         shortLabel = "Shop",
         category = TaskCategory.WISDOM,
     ),
