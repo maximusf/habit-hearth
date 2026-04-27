@@ -16,8 +16,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -32,6 +36,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.graphics.ImageBitmap
@@ -63,6 +68,8 @@ private const val MapBuildingMaxEdgePx = 384
 /** Sized to sit inside one hex cell on the map art; centered on [VillageBuilding] fractions. */
 private val BuildingMarkerWidth = 50.dp
 private val BuildingMarkerHeight = 56.dp
+private val LockedBadgeSize = 28.dp
+private val LockedIconSize = 18.dp
 
 @Composable
 fun MapScreen(
@@ -308,6 +315,26 @@ private fun BuildingMarker(
                 contentScale = ContentScale.Fit,
                 colorFilter = colorFilter,
             )
+        }
+        if (locked) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center,
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(LockedBadgeSize)
+                        .background(Color.Black.copy(alpha = 0.5f), CircleShape),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Lock,
+                        contentDescription = "Locked",
+                        modifier = Modifier.size(LockedIconSize),
+                        tint = Color.White.copy(alpha = 0.95f),
+                    )
+                }
+            }
         }
     }
 }
