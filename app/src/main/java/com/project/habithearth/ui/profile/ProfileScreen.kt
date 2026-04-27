@@ -1,5 +1,7 @@
 package com.project.habithearth.ui.profile
 
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -35,6 +37,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -49,6 +52,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -57,25 +63,51 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.SavedStateHandle
 import com.project.habithearth.data.AccountSettings
 import com.project.habithearth.data.UserProgressRepository
-import androidx.compose.ui.platform.LocalContext
 import com.project.habithearth.ui.components.VerticalScrollIndicator
 import com.project.habithearth.ui.state.GameUiState
 import com.project.habithearth.ui.theme.HabitHearthTheme
 import kotlinx.coroutines.launch
 
+// Profile/settings screen
+// profile with stats
+// account
+    // display name
+    // username
+
+// general
+// preferences
+    //push notifications
+    // vacation mode
+    // theme
+    // language
+    // text size
+// security
+    //password
+
+// log out
+
 private data class ProfilePicturePlaceholder(
     val id: Int,
     val label: String,
     val backgroundColor: Color,
+    val imageAssetPath: String? = null,
 )
 
+private const val HedgehogPlaceholderAssetPath = "images/ProfilePlaceholders/hedgehog.PNG"
+private const val BearPlaceholderAssetPath = "images/ProfilePlaceholders/bear.PNG"
+
 private val profilePicturePlaceholders = listOf(
-    ProfilePicturePlaceholder(0, "A", Color(0xFF5C7C6A)),
-    ProfilePicturePlaceholder(1, "B", Color(0xFF6B5B7C)),
-    ProfilePicturePlaceholder(2, "C", Color(0xFF7C6B5B)),
-    ProfilePicturePlaceholder(3, "D", Color(0xFF5B6B7C)),
-    ProfilePicturePlaceholder(4, "E", Color(0xFF7C7C5B)),
-    ProfilePicturePlaceholder(5, "F", Color(0xFF5B7C7C)),
+    ProfilePicturePlaceholder(0, "A", Color(0xFF5C7C6A), HedgehogPlaceholderAssetPath),
+    ProfilePicturePlaceholder(1, "B", Color(0xFF6B5B7C), BearPlaceholderAssetPath),
+    ProfilePicturePlaceholder(2, "C", Color(0xFF7C6B5B), HedgehogPlaceholderAssetPath),
+    ProfilePicturePlaceholder(3, "D", Color(0xFF5B6B7C), HedgehogPlaceholderAssetPath),
+    ProfilePicturePlaceholder(4, "E", Color(0xFF7C7C5B), HedgehogPlaceholderAssetPath),
+    ProfilePicturePlaceholder(5, "F", Color(0xFF5B7C7C), HedgehogPlaceholderAssetPath),
+)
+
+@Composable
+private fun profileTextButtonColors() = ButtonDefaults.textButtonColors(
+    contentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -229,6 +261,7 @@ fun ProfileScreen(
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                     modifier = Modifier.weight(1f),
                 ) {
+                    // list of resources
                     ResourceLine(
                         label = "Strength gem",
                         value = gameUiState.strengthGems.toString(),
@@ -236,6 +269,7 @@ fun ProfileScreen(
                             GemPlaceholder(
                                 backgroundColor = Color(0xFFB85C5C),
                                 content = {
+                                    // need to change image to the gem_strength.png
                                     Icon(
                                         imageVector = Icons.Filled.Diamond,
                                         contentDescription = null,
@@ -251,8 +285,10 @@ fun ProfileScreen(
                         value = gameUiState.wisdomGems.toString(),
                         leading = {
                             GemPlaceholder(
+
                                 backgroundColor = Color(0xFF5C6BB8),
                                 content = {
+                                    // need to change image to the gem_wisdom.png
                                     Icon(
                                         imageVector = Icons.Filled.Diamond,
                                         contentDescription = null,
@@ -270,6 +306,7 @@ fun ProfileScreen(
                             GemPlaceholder(
                                 backgroundColor = Color(0xFF5CB86B),
                                 content = {
+                                    // need to change image to the gem_vitality.png
                                     Icon(
                                         imageVector = Icons.Filled.Diamond,
                                         contentDescription = null,
@@ -287,6 +324,7 @@ fun ProfileScreen(
                             GemPlaceholder(
                                 backgroundColor = Color(0xFF8B5CB8),
                                 content = {
+                                    // need to change image to the gem_spirit.png
                                     Icon(
                                         imageVector = Icons.Filled.Diamond,
                                         contentDescription = null,
@@ -304,6 +342,7 @@ fun ProfileScreen(
                             GemPlaceholder(
                                 backgroundColor = Color(0xFFC9A227),
                                 content = {
+                                    // need to change image to a coin
                                     Icon(
                                         imageVector = Icons.Filled.Paid,
                                         contentDescription = null,
@@ -319,6 +358,12 @@ fun ProfileScreen(
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
 
+
+            Text(
+                text = "Preferences",
+                style = MaterialTheme.typography.titleLarge,
+            )
+
             SettingsToggleRow(
                 label = "Push notifications",
                 checked = account.pushNotifications,
@@ -327,7 +372,7 @@ fun ProfileScreen(
                 },
             )
 
-            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+            //HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
 
             SettingsToggleRow(
                 label = "Vacation mode",
@@ -337,7 +382,7 @@ fun ProfileScreen(
                 },
             )
 
-            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+           // HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
 
             SettingsDropdownRow(
                 label = "Theme mode",
@@ -351,7 +396,7 @@ fun ProfileScreen(
                 },
             )
 
-            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+           // HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
 
             SettingsDropdownRow(
                 label = "Language",
@@ -365,7 +410,7 @@ fun ProfileScreen(
                 },
             )
 
-            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+           // HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
 
             SettingsDropdownRow(
                 label = "Text size",
@@ -379,7 +424,23 @@ fun ProfileScreen(
                 },
             )
 
+           // HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
             HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+            Text(
+                text = "Account",
+                style = MaterialTheme.typography.titleLarge,
+            )
+            Text(
+                text = "Username and password for signing in. Stored only on this device.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                text = "Account & settings are saved on this device.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             OutlinedTextField(
                 value = displayNameDraft,
                 onValueChange = { displayNameDraft = it },
@@ -393,24 +454,10 @@ fun ProfileScreen(
                         userProgressRepository.setDisplayName(displayNameDraft)
                     }
                 },
+                colors = profileTextButtonColors(),
             ) {
                 Text("Save display name")
             }
-            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-            Text(
-                text = "Account",
-                style = MaterialTheme.typography.titleMedium,
-            )
-            Text(
-                text = "Username and password for signing in. Stored only on this device.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Text(
-                text = "Account & settings are saved on this device.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
 
             if (account.hasLoginCredentials) {
                 OutlinedTextField(
@@ -428,6 +475,7 @@ fun ProfileScreen(
                         }
                     },
                     enabled = usernameDraft.isNotBlank(),
+                    colors = profileTextButtonColors(),
                 ) {
                     Text("Save username")
                 }
@@ -435,7 +483,10 @@ fun ProfileScreen(
                     text = "Password",
                     style = MaterialTheme.typography.titleSmall,
                 )
-                TextButton(onClick = { showChangePassword = true }) {
+                TextButton(
+                    onClick = { showChangePassword = true },
+                    colors = profileTextButtonColors(),
+                ) {
                     Text("Change password")
                 }
             } else {
@@ -497,6 +548,7 @@ fun ProfileScreen(
                         }
                     },
                     modifier = Modifier.fillMaxWidth(),
+                    colors = profileTextButtonColors(),
                 ) {
                     Text("Save sign-in")
                 }
@@ -507,11 +559,11 @@ fun ProfileScreen(
                 text = "Session",
                 style = MaterialTheme.typography.titleMedium,
             )
-            Text(
-                text = "Sign out locks the app until you sign in again with your username and password.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+//            Text(
+//                text = "Sign out locks the app until you sign in again with your username and password.",
+//                style = MaterialTheme.typography.bodySmall,
+//                color = MaterialTheme.colorScheme.onSurfaceVariant,
+//            )
             if (account.hasLoginCredentials) {
                 Button(
                     onClick = { showLogoutConfirm = true },
@@ -536,7 +588,7 @@ fun ProfileScreen(
                 Text(
                     text = msg,
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.primary,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
                 )
             }
 
@@ -559,6 +611,16 @@ private fun ProfileAvatar(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val context = LocalContext.current
+    val avatarBitmap = remember(selected.imageAssetPath) {
+        selected.imageAssetPath?.let { path ->
+            decodeAssetBitmap(
+                context = context,
+                assetPath = path,
+                maxEdgePx = 512,
+            )
+        }
+    }
     Box(
         modifier = modifier
             .clip(CircleShape)
@@ -567,11 +629,20 @@ private fun ProfileAvatar(
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Text(
-            text = selected.label,
-            style = MaterialTheme.typography.headlineMedium,
-            color = Color.White.copy(alpha = 0.92f),
-        )
+        if (avatarBitmap != null) {
+            androidx.compose.foundation.Image(
+                bitmap = avatarBitmap,
+                contentDescription = "Profile avatar ${selected.label}",
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop,
+            )
+        } else {
+            Text(
+                text = selected.label,
+                style = MaterialTheme.typography.headlineMedium,
+                color = Color.White.copy(alpha = 0.92f),
+            )
+        }
     }
 }
 
@@ -593,7 +664,7 @@ private fun ProfilePictureGalleryDialog(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 Text(
-                    text = "Placeholders until art is added. Tap one to use it.",
+                    text = "Tap one to use it.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -607,6 +678,16 @@ private fun ProfilePictureGalleryDialog(
                             if (index > 0) {
                                 Spacer(modifier = Modifier.width(12.dp))
                             }
+                            val context = LocalContext.current
+                            val optionBitmap = remember(option.imageAssetPath) {
+                                option.imageAssetPath?.let { path ->
+                                    decodeAssetBitmap(
+                                        context = context,
+                                        assetPath = path,
+                                        maxEdgePx = 512,
+                                    )
+                                }
+                            }
                             Box(
                                 modifier = Modifier
                                     .size(72.dp)
@@ -616,11 +697,20 @@ private fun ProfilePictureGalleryDialog(
                                     .clickable { onPick(option) },
                                 contentAlignment = Alignment.Center,
                             ) {
-                                Text(
-                                    text = option.label,
-                                    style = MaterialTheme.typography.headlineSmall,
-                                    color = Color.White.copy(alpha = 0.92f),
-                                )
+                                if (optionBitmap != null) {
+                                    androidx.compose.foundation.Image(
+                                        bitmap = optionBitmap,
+                                        contentDescription = "Profile avatar option ${option.label}",
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentScale = ContentScale.Crop,
+                                    )
+                                } else {
+                                    Text(
+                                        text = option.label,
+                                        style = MaterialTheme.typography.headlineSmall,
+                                        color = Color.White.copy(alpha = 0.92f),
+                                    )
+                                }
                             }
                         }
                     }
@@ -628,11 +718,42 @@ private fun ProfilePictureGalleryDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) {
+            TextButton(onClick = onDismiss, colors = profileTextButtonColors()) {
                 Text("Close")
             }
         },
     )
+}
+
+private fun decodeAssetBitmap(
+    context: android.content.Context,
+    assetPath: String,
+    maxEdgePx: Int,
+): ImageBitmap? {
+    return runCatching {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        context.assets.open(assetPath).use { BitmapFactory.decodeStream(it, null, bounds) }
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return@runCatching null
+
+        val sample = sampleSizeForMaxEdge(bounds.outWidth, bounds.outHeight, maxEdgePx)
+        val decode = BitmapFactory.Options().apply {
+            inSampleSize = sample
+            inScaled = false
+        }
+        context.assets.open(assetPath).use { stream ->
+            BitmapFactory.decodeStream(stream, null, decode)?.asImageBitmap()
+        }
+    }.getOrNull()
+}
+
+private fun sampleSizeForMaxEdge(width: Int, height: Int, maxEdgePx: Int): Int {
+    val longest = maxOf(width, height)
+    if (longest <= maxEdgePx) return 1
+    var sample = 1
+    while (longest / sample > maxEdgePx) {
+        sample *= 2
+    }
+    return sample
 }
 
 @Composable
@@ -705,6 +826,12 @@ private fun SettingsToggleRow(
         Switch(
             checked = checked,
             onCheckedChange = onCheckedChange,
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.95f),
+                checkedTrackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
+                uncheckedThumbColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
+                uncheckedTrackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.22f),
+            ),
         )
     }
 }
@@ -828,28 +955,17 @@ private fun ChangePasswordDialog(
                         else -> onSubmit(currentPassword, newPassword)
                     }
                 },
+                colors = profileTextButtonColors(),
             ) {
                 Text("Update")
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
+            TextButton(onClick = onDismiss, colors = profileTextButtonColors()) {
                 Text("Cancel")
             }
         },
     )
 }
 
-//@Preview(showBackground = true, showSystemUi = true)
-//@Composable
-//private fun ProfileScreenPreview() {
-//    val context = LocalContext.current
-//    val repo = remember { UserProgressRepository(context.applicationContext) }
-//    HabitHearthTheme {
-//        ProfileScreen(
-//            gameUiState = GameUiState(),
-//            userProgressRepository = repo,
-//            onLogoutSuccess = {},
-//        )
-//    }
-//}
+
