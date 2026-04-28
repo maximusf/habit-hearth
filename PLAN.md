@@ -250,10 +250,30 @@ message ProgressProto {
   repeated string owned_building_ids = 7;
 }
 
+message StoryChoiceProto {
+  int32 plot_point_index = 1;   // 0..4
+  string choice_id = 2;          // which of 1-3 options the user picked
+}
+
+message StorySegmentProto {
+  string anchor_id = 1;          // prewritten beat id OR generated segment id
+  bool is_generated = 2;         // true if Gemini-authored, false if strings.xml fallback
+  string text = 3;
+}
+
+message StoryProto {
+  repeated StorySegmentProto segments = 1;  // append-only narrative log
+  repeated StoryChoiceProto choices = 2;     // append-only choice history
+  int32 plot_points_reached = 3;             // 0..5
+  bool is_complete = 4;                      // true once plot point 5 resolved
+  string frozen_category = 5;                // dominant gem category at story start
+}
+
 message UserProgressProto {
   SettingsProto settings = 1;
   ProgressProto progress = 2;
   repeated TaskProto tasks = 3;
+  StoryProto story = 4;
 }
 ```
 
@@ -263,6 +283,7 @@ Notes:
 - can convert to proto enum later if categories stabilize
 - empty `building_id` means Home/unassigned
 - `display_name` lives in `SettingsProto` since profile screen edits it as a setting
+- `frozen_category` snapshots the dominant category at story start so tone stays coherent across sessions; choice gating still uses *live* stats at each plot point
 
 ## Execution Plan
 
@@ -377,7 +398,7 @@ Goal:
 
 - remove persistence logic from monolithic UI state holder
 
-Pre-step — `GameUiState` consumer audit:
+Pre-step — `GameUiState` consumer so:
 
 - list every screen reading `GameUiState` before split
 - map each consumer to new ViewModel/repository source
@@ -465,6 +486,41 @@ Reason:
 
 Second milestone: `ProgressRepository` + `SettingsRepository` + remaining screens.
 
+## Story Persistence Design
+
+The story is **per-user, stable across restarts/updates**. Slight variation between users via `frozen_category` + choice history. No rewinds: choices are locked once made.
+
+### Shape
+
+- 5 plot points (`plot_point_index = 0..4`)
+- 1-3 choices surfaced at each plot point, gated on **live** stats
+- One narrative segment per beat (no chunking)
+- Generated text is cached verbatim — re-entry never re-calls Gemini for the same beat
+
+### Why cache text instead of re-generating from a seed
+
+Seed-replay assumes Gemini is bit-stable across model versions. It isn't. Caching the prose locks the story for the user even after model upgrades. Storage cost is trivial (tens of segments × short prose).
+
+### Dominant category integration
+
+- **Tone** — frozen at story start as `StoryProto.frozen_category`. Injected into Gemini prompt to flavor metaphors, descriptions, NPC reactions. Frozen so prose stays consistent across sessions.
+- **Choice gating** — evaluated against *live* stats at each plot point. The frozen-category-aligned choice is always shown; off-category choices appear only when their stat threshold is met. This keeps tone coherent while letting choices stay reactive to current play.
+
+### Offline / no-key fallback
+
+Gemini is best-effort. Every prewritten beat and every choice option lives in `res/values/strings.xml` keyed by `(plot_point_index, category)`. `StoryRepository.nextBeat()` tries Gemini first; on failure or when `BuildConfig.GEMINI_API_KEY.isBlank()`, falls back to the string resource and stores the segment with `is_generated = false`. Same cache row format either way.
+
+This also gives a deterministic, fully-offline build path for tests and CI.
+
+### Repository / VM placement
+
+- New: `data/story/StoryRepository.kt` — owns `StoryProto` reads/writes, Gemini call, fallback resolution
+- New: `data/story/StoryMappers.kt` — proto ↔ model
+- New: `model/StorySegment.kt`, `model/StoryChoice.kt`, `model/StoryState.kt`
+- New: `ui/story/StoryViewModel.kt` — reads `observeStory()` from repo, exposes `chooseAt(plotPointIndex, choiceId)` → repo
+- `ui/story/StoryScreen.kt` rewires onto `StoryViewModel`, drops direct Gemini call
+- Slot story work into the **second milestone** alongside `ProgressRepository` + `SettingsRepository`. Do schema bump (add `StoryProto story = 4` to `UserProgressProto`) at the start of the second milestone — before the proto cutover — so subsequent writes don't need a proto migration.
+
 ## Acceptance Criteria
 
 Plan considered complete when implementation meets all of these:
@@ -485,12 +541,13 @@ Plan considered complete when implementation meets all of these:
    - task creation/edit/completion
    - building purchase/unlock
    - settings/profile updates
+10. Story state survives restart and app update: same prose, same choices, same plot-point progress per user. Offline / missing-key path falls back to `strings.xml` and caches identically.
 
 ## Risks / Open Questions
 
 1. **DataStore `1.2.1` stability** — verify on developer.android.com release notes before Phase 1.
 2. **AGP 9.1.0 + protobuf plugin compat** — verify before Phase 1. Fallback: `kotlinx.serialization` + custom `Serializer<T>`.
-3. **Story data** — confirm whether story progress must persist. If yes, add to proto schema *before* Phase 1, not after. Schema change post-cutover = pain.
+3. ~~**Story data** — confirm whether story progress must persist.~~ **Resolved 2026-04-28.** Story is per-user, stable across restarts/updates. Schema (`StoryProto`) defined in [Proposed Proto Schema](#proposed-proto-schema); design captured in [Story Persistence Design](#story-persistence-design). Schema bump scheduled at the start of the second milestone, before the proto cutover.
 4. **`GameStateViewModel` future** — shrink to shell aggregator or remove entirely. Decide during Phase 4 audit.
 5. **Single proto file vs multiple** — single file first. Split only if file grows unwieldy.
 6. **`TaskCategory` representation** — string in proto for forward-compat with new categories. Convert to proto enum later if categories stabilize.
