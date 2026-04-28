@@ -267,6 +267,7 @@ message StoryProto {
   int32 plot_points_reached = 3;             // 0..5
   bool is_complete = 4;                      // true once plot point 5 resolved
   string frozen_category = 5;                // dominant gem category at story start
+  int64 random_seed = 6;                     // stable per-user seed for the random non-default choice pick
 }
 
 message UserProgressProto {
@@ -488,14 +489,17 @@ Second milestone: `ProgressRepository` + `SettingsRepository` + remaining screen
 
 ## Story Persistence Design
 
-The story is **per-user, stable across restarts/updates**. Slight variation between users via `frozen_category` + choice history. No rewinds: choices are locked once made.
+The story is **per-user, stable across restarts/updates**. Slight variation between users via `frozen_category` + choice history. No rewinds: choices are locked once made. The narrative itself is **single-path** (Chapter 1 spec, see `docs/story/chapter-1.md` once authored) — choice picks are flavor and are persisted, but the next segment does not branch on them. Reactivity to the player comes from the protagonist sprite swap and which category-flavored choice options get surfaced.
 
 ### Shape
 
-- 5 plot points (`plot_point_index = 0..4`)
-- 1-3 choices surfaced at each plot point, gated on **live** stats
+- 6 sections: 5 plot points (`plot_point_index = 0..4`) + 1 closing section after the final choice, no choice attached
+- 3 choices surfaced at each plot point: `[default, frozen_category, random_other]`
+  - `default` — neutral fallback option, always available
+  - `frozen_category` — the player's dominant category at story start
+  - `random_other` — one of the remaining 3 categories, picked deterministically per user via `Random(random_seed + plotPointIndex)` so the surfaced option is stable across re-renders
 - One narrative segment per beat (no chunking)
-- Generated text is cached verbatim — re-entry never re-calls Gemini for the same beat
+- Single-path: segment text does not vary on prior choices. Generated text (when Gemini lands) is cached verbatim per `(plot_point_index)`, not per choice history
 
 ### Why cache text instead of re-generating from a seed
 
@@ -503,12 +507,16 @@ Seed-replay assumes Gemini is bit-stable across model versions. It isn't. Cachin
 
 ### Dominant category integration
 
-- **Tone** — frozen at story start as `StoryProto.frozen_category`. Injected into Gemini prompt to flavor metaphors, descriptions, NPC reactions. Frozen so prose stays consistent across sessions.
-- **Choice gating** — evaluated against *live* stats at each plot point. The frozen-category-aligned choice is always shown; off-category choices appear only when their stat threshold is met. This keeps tone coherent while letting choices stay reactive to current play.
+- **Tone** — frozen at story start as `StoryProto.frozen_category`. Drives protagonist sprite variant in `StoryScreen`. If/when Gemini generation is layered in, also injected into the prompt as a tone hint.
+- **Choice surfacing** — frozen-category choice always appears in the 3-option set. `random_other` is sampled once per plot point via `Random(random_seed + plotPointIndex)` and persists for the life of the story; resampling on re-render would change what the player sees, which breaks the "same story" contract.
+
+### Character sprites
+
+Per-section character casts are **hardcoded in code** keyed off `plot_point_index`, not stored in the proto. The cast is a fixed property of the chapter content, not per-user state, so no schema bump is needed. Protagonist drawable resolves off `frozen_category`.
 
 ### Offline / no-key fallback
 
-Gemini is best-effort. Every prewritten beat and every choice option lives in `res/values/strings.xml` keyed by `(plot_point_index, category)`. `StoryRepository.nextBeat()` tries Gemini first; on failure or when `BuildConfig.GEMINI_API_KEY.isBlank()`, falls back to the string resource and stores the segment with `is_generated = false`. Same cache row format either way.
+Gemini is best-effort. Every section's prose and every choice option lives in `res/values/strings.xml` keyed by `(plot_point_index)` for prose and `(plot_point_index, category)` for choice labels. `StoryRepository.nextBeat()` tries Gemini first; on failure or when `BuildConfig.GEMINI_API_KEY.isBlank()`, falls back to the string resource and stores the segment with `is_generated = false`. Same cache row format either way.
 
 This also gives a deterministic, fully-offline build path for tests and CI.
 
