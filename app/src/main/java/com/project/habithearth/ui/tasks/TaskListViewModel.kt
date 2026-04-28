@@ -1,0 +1,72 @@
+package com.project.habithearth.ui.tasks
+
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewModelScope
+import com.project.habithearth.data.task.TaskRepository
+import com.project.habithearth.model.HabitTask
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
+
+/**
+ * Screen state holder for task lists (HomeScreen, BuildingDetailScreen).
+ *
+ * Phase 4 of the DataStore refactor (see PLAN.md): this ViewModel exists but
+ * is not yet wired into screens - that is Phase 5. Until then, the legacy
+ * [com.project.habithearth.ui.state.GameStateViewModel] still owns task
+ * persistence so the app keeps working unchanged.
+ *
+ * Hot vs cold flow notes:
+ *   - [tasks] is hot ([SharingStarted.WhileSubscribed]) so multiple screens
+ *     observing simultaneously share one DataStore subscription. The 5s grace
+ *     period avoids re-reading the proto on configuration changes.
+ *   - [tasksForBuilding] returns a cold [Flow] rather than caching a StateFlow
+ *     per building id; otherwise this VM would leak a flow per visited
+ *     building over a long session.
+ */
+class TaskListViewModel(
+    private val repo: TaskRepository,
+) : ViewModel() {
+
+    val tasks: StateFlow<List<HabitTask>> = repo.observeTasks()
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(stopTimeoutMillis = 5_000),
+            initialValue = emptyList(),
+        )
+
+    fun tasksForBuilding(buildingId: String): Flow<List<HabitTask>> =
+        repo.observeTasksForBuilding(buildingId).distinctUntilChanged()
+
+    /**
+     * Toggles completion via the repository. The reward-pool delta (gems/coins)
+     * is **not** applied here - PLAN.md keeps that on the future
+     * `ProgressRepository`. [onTransition] reports whether the toggle actually
+     * flipped persisted state so screens can route the gem update to the
+     * legacy [com.project.habithearth.ui.state.GameStateViewModel] without
+     * double-crediting on no-op writes.
+     */
+    fun setCompleted(
+        taskId: String,
+        completed: Boolean,
+        onTransition: ((HabitTask) -> Unit)? = null,
+    ) {
+        viewModelScope.launch {
+            val before = tasks.value.firstOrNull { it.id == taskId } ?: return@launch
+            val changed = repo.setTaskCompleted(taskId, completed)
+            if (changed) onTransition?.invoke(before)
+        }
+    }
+}
+
+@Suppress("UNCHECKED_CAST")
+class TaskListViewModelFactory(
+    private val repo: TaskRepository,
+) : ViewModelProvider.Factory {
+    override fun <T : ViewModel> create(modelClass: Class<T>): T =
+        TaskListViewModel(repo) as T
+}
