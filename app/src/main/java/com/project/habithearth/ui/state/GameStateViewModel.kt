@@ -4,7 +4,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.project.habithearth.data.UserProgressRepository
-import com.project.habithearth.model.HabitTask
 import com.project.habithearth.model.ResourceProgress
 import com.project.habithearth.model.TaskCategory
 import com.project.habithearth.model.canAfford
@@ -25,7 +24,6 @@ data class GameUiState(
     val spiritGems: Int = 8,
     val coins: Int = 240,
     val xpProgress: Float = 0.62f,
-    val tasks: List<HabitTask> = defaultSeedTasks(),
     /** Map buildings the player has unlocked (starter hubs are merged in when loading a save). */
     val ownedBuildingIds: Set<String> = emptySet(),
 )
@@ -52,74 +50,6 @@ class GameStateViewModel(
         viewModelScope.launch {
             userProgressRepository.saveGameState(_uiState.value)
         }
-    }
-
-    fun addTask(
-        title: String,
-        note: String,
-        category: TaskCategory,
-        rewardAmount: Int = 1,
-        buildingId: String? = null,
-    ) {
-        val normalizedBuilding = buildingId?.trim()?.takeIf { it.isNotEmpty() }
-        _uiState.update { s ->
-            val task = HabitTask(
-                title = title.trim(),
-                note = note.trim(),
-                category = category,
-                rewardAmount = rewardAmount.coerceAtLeast(1),
-                buildingId = normalizedBuilding,
-            )
-            s.copy(tasks = s.tasks + task)
-        }
-        persist()
-    }
-
-    fun setTaskCompleted(taskId: String, completed: Boolean) {
-        _uiState.update { s ->
-            val task = s.tasks.find { it.id == taskId } ?: return@update s
-            if (task.isCompleted == completed) return@update s
-
-            val delta = if (completed) task.rewardAmount else -task.rewardAmount
-            val newTasks = s.tasks.map { t ->
-                if (t.id == taskId) t.copy(isCompleted = completed) else t
-            }
-            s.copy(tasks = newTasks).withResourceDelta(task.category, delta)
-        }
-        persist()
-    }
-
-    fun updateTask(
-        taskId: String,
-        title: String,
-        note: String,
-        category: TaskCategory,
-        buildingId: String?,
-    ) {
-        val normalizedBuilding = buildingId?.trim()?.takeIf { it.isNotEmpty() }
-        _uiState.update { s ->
-            val task = s.tasks.find { it.id == taskId } ?: return@update s
-            var next = s
-            if (task.isCompleted && task.category != category) {
-                next = next.withResourceDelta(task.category, -task.rewardAmount)
-                next = next.withResourceDelta(category, task.rewardAmount)
-            }
-            next.copy(
-                tasks = next.tasks.map { t ->
-                    if (t.id == taskId) {
-                        t.copy(
-                            title = title.trim(),
-                            note = note.trim(),
-                            category = category,
-                            buildingId = normalizedBuilding,
-                        )
-                    } else {
-                        t
-                    }
-                },
-            )
-        }
-        persist()
     }
 
     /**
@@ -214,20 +144,3 @@ class GameStateViewModelFactory(
     }
 }
 
-private fun defaultSeedTasks(): List<HabitTask> = listOf(
-    HabitTask(
-        title = "Morning stretch — 5 min",
-        category = TaskCategory.VITALITY,
-        rewardAmount = 1,
-    ),
-    HabitTask(
-        title = "Drink a full glass of water",
-        category = TaskCategory.VITALITY,
-        rewardAmount = 1,
-    ),
-    HabitTask(
-        title = "Read one chapter",
-        category = TaskCategory.WISDOM,
-        rewardAmount = 2,
-    ),
-)

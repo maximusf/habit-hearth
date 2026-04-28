@@ -110,7 +110,8 @@ class UserProgressRepository(
             prefs[KEY_SESSION_LOCKED] = false
 
             // Reset all in-game resources when a new account is created.
-            // Keep seed tasks (default [GameUiState.tasks]) but zero out gems/coins/progress.
+            // Tasks now persist via TaskRepository; this only zeroes the
+            // gem/coin/progress pools that still live on GameUiState.
             prefs[KEY_GAME_STATE_JSON] =
                 gson.toJson(
                     GameUiState(
