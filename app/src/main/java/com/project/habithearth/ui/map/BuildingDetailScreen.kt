@@ -42,14 +42,14 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.project.habithearth.data.UserProgressRepository
+import com.project.habithearth.HabitHearthApplication
 import com.project.habithearth.model.canAfford
 import com.project.habithearth.ui.components.HabitTaskRowCard
 import com.project.habithearth.ui.components.VerticalScrollIndicator
 import com.project.habithearth.ui.state.GameStateViewModel
-import com.project.habithearth.ui.state.GameStateViewModelFactory
 import com.project.habithearth.ui.state.resources
-import com.project.habithearth.ui.theme.HabitHearthTheme
+import com.project.habithearth.ui.tasks.TaskListViewModel
+import com.project.habithearth.ui.tasks.TaskListViewModelFactory
 import com.project.habithearth.ui.theme.HearthPanelWarm
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -62,10 +62,18 @@ fun BuildingDetailScreen(
     gameStateViewModel: GameStateViewModel,
     modifier: Modifier = Modifier,
 ) {
+    val app = LocalContext.current.applicationContext as HabitHearthApplication
+    val taskListVm: TaskListViewModel = viewModel(
+        factory = TaskListViewModelFactory(app.taskRepository),
+    )
+    // tasksForBuilding is a cold flow keyed by buildingId; remember it so we
+    // don't allocate a new flow on every recomposition.
+    val tasksFlow = remember(buildingId) { taskListVm.tasksForBuilding(buildingId) }
+    val tasksInBuilding by tasksFlow.collectAsState(initial = emptyList())
+
     val game by gameStateViewModel.uiState.collectAsState()
     val building = villageBuildingById(buildingId)
     val owned = buildingId in game.ownedBuildingIds
-    val tasksInBuilding = game.tasks.filter { it.buildingId == buildingId }
     val scrollState = rememberScrollState()
 
     Scaffold(
@@ -200,7 +208,23 @@ fun BuildingDetailScreen(
                                 HabitTaskRowCard(
                                     task = task,
                                     onCompletedChange = { checked ->
-                                        gameStateViewModel.setTaskCompleted(task.id, checked)
+                                        // Persist the flip via the
+                                        // DataStore-backed TaskListViewModel
+                                        // and route the gem/coin delta to
+                                        // the legacy GameStateViewModel only
+                                        // on a real transition. See HomeScreen
+                                        // for the equivalent path.
+                                        taskListVm.setCompleted(task.id, checked) { before ->
+                                            val delta = if (checked) {
+                                                before.rewardAmount
+                                            } else {
+                                                -before.rewardAmount
+                                            }
+                                            gameStateViewModel.applyRewardDelta(
+                                                before.category,
+                                                delta,
+                                            )
+                                        }
                                     },
                                     onOpenEdit = { onEditTask(task.id) },
                                 )

@@ -122,6 +122,23 @@ class GameStateViewModel(
         persist()
     }
 
+    /**
+     * Applies a gem/coin delta for a task category without touching the task
+     * list. Phase 5 of the DataStore refactor (see PLAN.md): tasks now live in
+     * [com.project.habithearth.data.task.TaskRepository], but reward-pool
+     * bookkeeping stays here until `ProgressRepository` lands. Screens call
+     * this after [com.project.habithearth.ui.tasks.TaskListViewModel.setCompleted]
+     * reports a real flip, so we don't double-credit on no-op writes.
+     *
+     * Pass a positive [delta] when crediting a fresh completion, negative when
+     * un-completing or re-categorizing a completed task.
+     */
+    fun applyRewardDelta(category: TaskCategory, delta: Int) {
+        if (delta == 0) return
+        _uiState.update { it.withResourceDelta(category, delta) }
+        persist()
+    }
+
     private fun GameUiState.withResourceDelta(category: TaskCategory, delta: Int): GameUiState {
         return when (category) {
             TaskCategory.STRENGTH -> copy(strengthGems = (strengthGems + delta).coerceAtLeast(0))

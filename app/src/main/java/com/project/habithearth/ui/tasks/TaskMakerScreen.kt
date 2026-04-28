@@ -29,39 +29,66 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.project.habithearth.data.UserProgressRepository
-import com.project.habithearth.ui.map.defaultVillageBuildings
+import com.project.habithearth.HabitHearthApplication
 import com.project.habithearth.model.TaskCategory
+import com.project.habithearth.ui.map.defaultVillageBuildings
 import com.project.habithearth.ui.state.GameStateViewModel
 import com.project.habithearth.ui.theme.HearthPanelWarm
 
+/**
+ * Habit create/edit screen.
+ *
+ * Phase 5 of the DataStore refactor (see PLAN.md): persistence moved off
+ * [GameStateViewModel] onto [TaskEditorViewModel] (DataStore-backed). Route
+ * args (`taskId`, `buildingId`) are picked up by the editor VM via its
+ * SavedStateHandle, so this composable no longer takes them as parameters.
+ *
+ * [gameStateViewModel] is still read for two pieces of progress data that
+ * have not yet been split out (deferred to the second milestone):
+ *   - `ownedBuildingIds` to filter the building dropdown.
+ *   - reward-pool bookkeeping when a *completed* task's category changes
+ *     (see the save handler). [TaskEditorViewModel.save] does not touch
+ *     gems/coins, so the delta is applied here against the legacy VM.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TaskMakerScreen(
-    taskId: String?,
-    initialBuildingId: String? = null,
     onBack: () -> Unit,
     gameStateViewModel: GameStateViewModel,
     modifier: Modifier = Modifier,
 ) {
-    val game by gameStateViewModel.uiState.collectAsState()
-    val existingTask = taskId?.let { id -> game.tasks.find { it.id == id } }
-    val isEditMode = existingTask != null
+    val app = LocalContext.current.applicationContext as HabitHearthApplication
+    val editorVm: TaskEditorViewModel = viewModel(
+        factory = TaskEditorViewModelFactory(app.taskRepository),
+    )
 
-    var title by remember(taskId) { mutableStateOf("") }
-    var note by remember(taskId) { mutableStateOf("") }
+    val game by gameStateViewModel.uiState.collectAsState()
+    val existingTask by editorVm.editingTask.collectAsState()
+    val isEditMode = editorVm.isEditMode
+    val initialBuildingId = editorVm.initialBuildingId
+
+    var title by remember { mutableStateOf("") }
+    var note by remember { mutableStateOf("") }
     var categoryExpanded by remember { mutableStateOf(false) }
-    var selectedCategory by remember(taskId) { mutableStateOf(TaskCategory.UNSORTED) }
+    var selectedCategory by remember { mutableStateOf(TaskCategory.UNSORTED) }
     var buildingExpanded by remember { mutableStateOf(false) }
-    var selectedBuildingId by remember(taskId) { mutableStateOf<String?>(null) }
+    var selectedBuildingId by remember { mutableStateOf<String?>(null) }
+    // Track whether the form has been seeded from the persisted task at least
+    // once. Without this, an in-flight DataStore re-emission (e.g. a save
+    // round-trip) would clobber whatever the user just typed.
+    var seeded by remember { mutableStateOf(false) }
+
     val villageBuildings = remember { defaultVillageBuildings() }
     val ownedBuildings = remember(game.ownedBuildingIds) {
         villageBuildings.filter { it.id in game.ownedBuildingIds }
     }
     val buildingsForDropdown = remember(ownedBuildings, existingTask?.buildingId) {
+        // If the task is filed in a building the player no longer owns
+        // (shouldn't happen today, but cheap to guard), keep that orphan in
+        // the list so the user sees the current value rather than a silent
+        // reset to Home.
         val orphanId = existingTask?.buildingId
         val orphan = orphanId?.let { id -> villageBuildings.find { it.id == id } }
         if (orphan != null && orphan.id !in game.ownedBuildingIds) {
@@ -71,38 +98,34 @@ fun TaskMakerScreen(
         }
     }
 
-    LaunchedEffect(taskId, game.tasks) {
-        if (taskId != null && game.tasks.none { it.id == taskId }) {
+    // In edit mode, observeTask emits null if the task was deleted out from
+    // under us; bail back to the previous screen so the editor doesn't sit on
+    // stale state.
+    LaunchedEffect(isEditMode, existingTask, seeded) {
+        if (isEditMode && seeded && existingTask == null) {
             onBack()
-            return@LaunchedEffect
         }
     }
 
-    LaunchedEffect(
-        taskId,
-        existingTask?.id,
-        existingTask?.title,
-        existingTask?.note,
-        existingTask?.category,
-        existingTask?.buildingId,
-        initialBuildingId,
-    ) {
-        if (existingTask != null) {
-            title = existingTask.title
-            note = existingTask.note
-            selectedCategory = existingTask.category
-            selectedBuildingId = existingTask.buildingId
-        } else if (taskId == null) {
-            title = ""
-            note = ""
-            selectedCategory = TaskCategory.UNSORTED
-            selectedBuildingId =
-                initialBuildingId?.takeIf { it in game.ownedBuildingIds }
+    LaunchedEffect(existingTask, isEditMode) {
+        if (!seeded) {
+            val task = existingTask
+            if (task != null) {
+                title = task.title
+                note = task.note
+                selectedCategory = task.category
+                selectedBuildingId = task.buildingId
+                seeded = true
+            } else if (!isEditMode) {
+                selectedBuildingId =
+                    initialBuildingId?.takeIf { it in game.ownedBuildingIds }
+                seeded = true
+            }
         }
     }
 
-    LaunchedEffect(game.ownedBuildingIds, taskId) {
-        if (taskId == null) {
+    LaunchedEffect(game.ownedBuildingIds, isEditMode) {
+        if (!isEditMode) {
             val sid = selectedBuildingId
             if (sid != null && sid !in game.ownedBuildingIds) {
                 selectedBuildingId = null
@@ -238,22 +261,22 @@ fun TaskMakerScreen(
 
             Button(
                 onClick = {
-                    if (isEditMode && taskId != null) {
-                        gameStateViewModel.updateTask(
-                            taskId = taskId,
-                            title = title,
-                            note = note,
-                            category = selectedCategory,
-                            buildingId = selectedBuildingId,
-                        )
-                    } else {
-                        gameStateViewModel.addTask(
-                            title = title,
-                            note = note,
-                            category = selectedCategory,
-                            buildingId = selectedBuildingId,
-                        )
+                    // Snapshot the persisted task before save so we can reward-
+                    // rebalance if the user changed the category of a task that
+                    // was already completed. TaskRepository.updateTask only
+                    // touches the task fields - the gem/coin pools live on the
+                    // legacy GameStateViewModel until ProgressRepository lands.
+                    val before = existingTask
+                    if (before != null && before.isCompleted && before.category != selectedCategory) {
+                        gameStateViewModel.applyRewardDelta(before.category, -before.rewardAmount)
+                        gameStateViewModel.applyRewardDelta(selectedCategory, before.rewardAmount)
                     }
+                    editorVm.saveAsync(
+                        title = title,
+                        note = note,
+                        category = selectedCategory,
+                        buildingId = selectedBuildingId,
+                    )
                     onBack()
                 },
                 enabled = title.isNotBlank(),
@@ -264,19 +287,3 @@ fun TaskMakerScreen(
         }
     }
 }
-
-//@Preview(showBackground = true, showSystemUi = true)
-//@Composable
-//private fun TaskMakerScreenPreview() {
-//    val context = LocalContext.current
-//    val repo = remember { UserProgressRepository(context.applicationContext) }
-//    val gameVm: GameStateViewModel = viewModel(factory = GameStateViewModelFactory(repo))
-//    HabitHearthTheme {
-//        TaskMakerScreen(
-//            taskId = null,
-//            initialBuildingId = "cottage",
-//            onBack = {},
-//            gameStateViewModel = gameVm,
-//        )
-//    }
-//}

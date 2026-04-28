@@ -6,7 +6,6 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.viewmodel.CreationExtras
-import androidx.lifecycle.viewmodel.MutableCreationExtras
 import com.project.habithearth.data.task.TaskRepository
 import com.project.habithearth.model.HabitTask
 import com.project.habithearth.model.TaskCategory
@@ -16,36 +15,35 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-private const val SAVED_TASK_ID_KEY = "task_editor.task_id"
-private const val SAVED_INITIAL_BUILDING_KEY = "task_editor.initial_building_id"
+// Match the navigation arg names declared in HabitHearthApp.kt's task_maker
+// routes. Reading them straight off SavedStateHandle lets the nav back-stack
+// entry's arguments bundle flow in without a custom CreationExtras helper.
+private const val ARG_TASK_ID = "taskId"
+private const val ARG_BUILDING_ID = "buildingId"
 
 /**
  * Screen state holder for [TaskMakerScreen] (create + edit).
  *
- * Phase 4 of the DataStore refactor (see PLAN.md): created but not yet wired
- * - Phase 5 swaps [TaskMakerScreen] off [com.project.habithearth.ui.state.GameStateViewModel]
- * onto this VM.
- *
  * Why [SavedStateHandle]:
- *   - Editor route arguments (`taskId`, `initialBuildingId`) live in the back
- *     stack, so the navigation library hands them in as saved state. Reading
- *     them here means the same VM works for both "new task" and "edit task"
- *     navigations without a separate factory call site.
+ *   - Editor route arguments (`taskId`, `buildingId`) live in the navigation
+ *     back stack entry, which the lifecycle library exposes through saved
+ *     state automatically. Reading them here means the same VM works for both
+ *     "new task" and "edit task" navigations without a separate factory call.
  *   - Survives process death; the editor reopens on the right task after a
  *     low-memory kill.
  *
- * The mode (new vs edit) is fixed by whether [SAVED_TASK_ID_KEY] is set when
- * the VM is constructed. Switching modes mid-session is not supported - the
- * navigation graph routes new and edit through different destinations, so
- * each gets its own VM instance.
+ * The mode (new vs edit) is fixed by whether the route supplied a `taskId`
+ * when the VM is constructed. Switching modes mid-session is not supported -
+ * the navigation graph routes new and edit through different destinations,
+ * so each gets its own VM instance.
  */
 class TaskEditorViewModel(
     private val repo: TaskRepository,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
-    private val taskId: String? = savedStateHandle[SAVED_TASK_ID_KEY]
-    val initialBuildingId: String? = savedStateHandle[SAVED_INITIAL_BUILDING_KEY]
+    private val taskId: String? = savedStateHandle[ARG_TASK_ID]
+    val initialBuildingId: String? = savedStateHandle[ARG_BUILDING_ID]
 
     val isEditMode: Boolean = taskId != null
 
@@ -110,14 +108,11 @@ class TaskEditorViewModel(
 
 /**
  * Factory that injects [TaskRepository] while letting the ViewModel system
- * provide [SavedStateHandle] from the route arguments. Implemented via
- * [CreationExtras] (the modern AbstractSavedStateViewModelFactory replacement)
- * so the route's nav arguments flow into the saved state automatically when
- * constructed inside `viewModel(factory = ...)`.
- *
- * Callers should put the route's `taskId` / `initialBuildingId` into the
- * defaultArgs of the back stack entry (see [taskEditorCreationExtras]) before
- * resolving the VM.
+ * provide [SavedStateHandle] from the back stack entry's nav arguments. The
+ * [createSavedStateHandle] extension on [CreationExtras] is the modern
+ * replacement for AbstractSavedStateViewModelFactory and works inside
+ * `viewModel(factory = ...)` without any CreationExtras plumbing on the call
+ * site - the nav library populates the entry's extras for us.
  */
 @Suppress("UNCHECKED_CAST")
 class TaskEditorViewModelFactory(
@@ -127,23 +122,4 @@ class TaskEditorViewModelFactory(
         val savedStateHandle = extras.createSavedStateHandle()
         return TaskEditorViewModel(repo, savedStateHandle) as T
     }
-}
-
-/**
- * Builds [CreationExtras] carrying the editor's route arguments so the
- * factory can hand them to [SavedStateHandle]. Use from a composable that
- * already resolved the nav route's args.
- */
-fun taskEditorCreationExtras(
-    base: CreationExtras,
-    taskId: String?,
-    initialBuildingId: String?,
-): CreationExtras = MutableCreationExtras(base).apply {
-    set(
-        androidx.lifecycle.DEFAULT_ARGS_KEY,
-        android.os.Bundle().apply {
-            taskId?.let { putString(SAVED_TASK_ID_KEY, it) }
-            initialBuildingId?.let { putString(SAVED_INITIAL_BUILDING_KEY, it) }
-        },
-    )
 }
