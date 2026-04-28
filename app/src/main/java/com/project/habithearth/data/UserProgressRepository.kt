@@ -107,6 +107,13 @@ class UserProgressRepository(
     suspend fun completeAccountSetup(username: String, password: String, displayName: String) {
         val salt = CredentialHasher.generateSalt()
         val hash = CredentialHasher.hash(password, salt)
+        // Wipe the typed proto store *before* committing the new account to
+        // prefs. If the proto write fails (e.g. IO error), prefs stay
+        // untouched and the caller sees the failure: the previous account is
+        // intact, no half-created state. Doing prefs first risked a torn
+        // state where a "new" account was marked complete in prefs while
+        // still inheriting the previous user's tasks/story from the proto.
+        protoDataStore.updateData { UserProgressProto.DEFAULT }
         dataStore.edit { prefs ->
             prefs[KEY_ACCOUNT_COMPLETE] = true
             prefs[KEY_DISPLAY_NAME] = displayName.trim().ifBlank { "Traveler" }
@@ -131,11 +138,6 @@ class UserProgressRepository(
                     ),
                 )
         }
-        // Wipe the typed proto store too. Without this, a "Create account"
-        // from the sign-in screen would inherit the previous user's tasks and
-        // story state while resetting their gem pools, mixing accounts during
-        // the migration window.
-        protoDataStore.updateData { UserProgressProto.DEFAULT }
     }
 
     /**
@@ -245,14 +247,16 @@ class UserProgressRepository(
     }
 
     /** Wipes all stored preferences (account, game, settings) **and** the typed proto store (tasks, story).
-     * Used when starting a new account from the sign-in screen. Both stores
-     * have to flip together; otherwise the proto-side tasks/story would
-     * survive the wipe and leak into the next account. */
+     * Used when starting a new account from the sign-in screen. Proto store
+     * is wiped first: if it throws, prefs stay intact and the caller sees
+     * the failure with the old account still usable. The reverse order
+     * could leave the user "logged out" (prefs cleared) while their tasks
+     * and story persisted into the next account. */
     suspend fun clearAllLocalData() {
+        protoDataStore.updateData { UserProgressProto.DEFAULT }
         dataStore.edit { prefs ->
             prefs.clear()
         }
-        protoDataStore.updateData { UserProgressProto.DEFAULT }
     }
 
     companion object {

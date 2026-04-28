@@ -173,12 +173,20 @@ fun TaskMakerScreen(
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            // In edit mode the form is disabled until the editor VM has
+            // observed at least one emission for the requested taskId.
+            // Without this, a user typing fast could race the seeding
+            // LaunchedEffect: the late DataStore emission would clobber
+            // anything they had already entered. New-task mode has nothing
+            // to wait on, so the form is always live.
+            val formEnabled = !isEditMode || isEditingTaskLoaded
             OutlinedTextField(
                 value = title,
                 onValueChange = { title = it },
                 label = { Text("What will you do?") },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
+                enabled = formEnabled,
             )
             OutlinedTextField(
                 value = note,
@@ -186,6 +194,7 @@ fun TaskMakerScreen(
                 label = { Text("Note (optional)") },
                 modifier = Modifier.fillMaxWidth(),
                 minLines = 3,
+                enabled = formEnabled,
             )
 
             Text(
@@ -194,13 +203,14 @@ fun TaskMakerScreen(
             )
             ExposedDropdownMenuBox(
                 expanded = categoryExpanded,
-                onExpandedChange = { categoryExpanded = it },
+                onExpandedChange = { if (formEnabled) categoryExpanded = it },
             ) {
                 OutlinedTextField(
                     value = selectedCategory.displayName,
                     onValueChange = {},
                     readOnly = true,
                     singleLine = true,
+                    enabled = formEnabled,
                     label = { Text("Habit category") },
                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = categoryExpanded) },
                     modifier = Modifier
@@ -230,7 +240,7 @@ fun TaskMakerScreen(
             )
             ExposedDropdownMenuBox(
                 expanded = buildingExpanded,
-                onExpandedChange = { buildingExpanded = it },
+                onExpandedChange = { if (formEnabled) buildingExpanded = it },
             ) {
                 val buildingLabel = selectedBuildingId?.let { id ->
                     villageBuildings.find { it.id == id }?.let { b -> "${b.shortLabel} — ${b.name}" }
@@ -240,6 +250,7 @@ fun TaskMakerScreen(
                     onValueChange = {},
                     readOnly = true,
                     singleLine = true,
+                    enabled = formEnabled,
                     label = { Text("Building") },
                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = buildingExpanded) },
                     modifier = Modifier
@@ -272,16 +283,12 @@ fun TaskMakerScreen(
 
             Button(
                 onClick = {
-                    // Snapshot the persisted task before save so we can reward-
-                    // rebalance if the user changed the category of a task that
-                    // was already completed. TaskRepository.updateTask only
-                    // touches the task fields - the gem/coin pools live on the
-                    // legacy GameStateViewModel until ProgressRepository lands.
+                    // Snapshot the persisted task and target category at click
+                    // time so the reward-rebalance below sees the values as
+                    // they were when the user pressed Save, even if the
+                    // editing flow re-emits during the save round-trip.
                     val before = existingTask
-                    if (before != null && before.isCompleted && before.category != selectedCategory) {
-                        gameStateViewModel.applyRewardDelta(before.category, -before.rewardAmount)
-                        gameStateViewModel.applyRewardDelta(selectedCategory, before.rewardAmount)
-                    }
+                    val targetCategory = selectedCategory
                     // Pop only after the save has actually completed. Calling
                     // onBack() synchronously after saveAsync used to cancel
                     // the editor's viewModelScope mid-write (the back stack
@@ -290,12 +297,23 @@ fun TaskMakerScreen(
                     editorVm.saveAsync(
                         title = title,
                         note = note,
-                        category = selectedCategory,
+                        category = targetCategory,
                         buildingId = selectedBuildingId,
-                        onSaved = { onBack() },
+                        onSaved = {
+                            // Apply the reward rebalance only after the task
+                            // category change has actually persisted. Doing it
+                            // before saveAsync left the gem/coin pools mutated
+                            // even when the save threw or was cancelled,
+                            // silently desyncing rewards from tasks.
+                            if (before != null && before.isCompleted && before.category != targetCategory) {
+                                gameStateViewModel.applyRewardDelta(before.category, -before.rewardAmount)
+                                gameStateViewModel.applyRewardDelta(targetCategory, before.rewardAmount)
+                            }
+                            onBack()
+                        },
                     )
                 },
-                enabled = title.isNotBlank(),
+                enabled = title.isNotBlank() && (!isEditMode || isEditingTaskLoaded),
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text(if (isEditMode) "Save changes" else "Save habit")

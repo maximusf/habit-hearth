@@ -143,11 +143,14 @@ class TaskRepository(
      * re-checks shouldn't double-credit gems).
      */
     suspend fun setTaskCompleted(taskId: String, completed: Boolean): Boolean {
-        // Avoid mutating an external `var` from inside the updateData transform:
-        // DataStore may re-run the transform on contention, and a side effect
-        // captured on the first pass can outlive a retry that ends up returning
-        // `current` unchanged. Instead, snapshot the post-state at the end of
-        // updateData and derive the return value from comparing pre/post.
+        // DataStore may re-run the updateData transform on write contention,
+        // so the boolean return value has to track the *last* invocation -
+        // the one whose returned state actually persisted. We do that by
+        // computing `needsFlip` from `current` on every pass and assigning
+        // it to `localChanged`, which overwrites any value set by an earlier
+        // invocation. A first-write-wins pattern (`if (...) localChanged = true`)
+        // would leak a stale `true` from a retry that ended up taking the
+        // no-op branch.
         var localChanged = false
         dataStore.updateData { current ->
             val needsFlip = current.tasks.any { it.id == taskId && it.isCompleted != completed }
