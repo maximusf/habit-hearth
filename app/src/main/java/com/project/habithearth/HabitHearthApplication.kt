@@ -2,7 +2,7 @@ package com.project.habithearth
 
 import android.app.Application
 import com.project.habithearth.data.UserProgressRepository
-import com.project.habithearth.data.datastore.userProgressDataStore
+import com.project.habithearth.data.datastore.userProgressProtoDataStore
 import com.project.habithearth.data.task.TaskRepository
 
 class HabitHearthApplication : Application() {
@@ -12,7 +12,7 @@ class HabitHearthApplication : Application() {
 
     /**
      * Process-singleton task repository backed by the typed
-     * [com.project.habithearth.data.datastore.userProgressDataStore].
+     * [com.project.habithearth.data.datastore.userProgressProtoDataStore].
      *
      * Constructed here (not lazily inside ViewModels) so every consumer shares
      * the same DataStore subscription - DataStore is already a singleton via
@@ -29,7 +29,7 @@ class HabitHearthApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
-        userProgressRepository = UserProgressRepository(this, userProgressDataStore)
-        taskRepository = TaskRepository(userProgressDataStore)
+        userProgressRepository = UserProgressRepository(this, userProgressProtoDataStore)
+        taskRepository = TaskRepository(userProgressProtoDataStore)
     }
 }

@@ -9,6 +9,7 @@ import androidx.lifecycle.viewmodel.CreationExtras
 import com.project.habithearth.data.task.TaskRepository
 import com.project.habithearth.model.HabitTask
 import com.project.habithearth.model.TaskCategory
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -160,6 +161,14 @@ class TaskEditorViewModel(
             try {
                 val id = save(title, note, category, buildingId)
                 onSaved(id)
+            } catch (e: CancellationException) {
+                // Cancellation flows through structured concurrency (e.g.
+                // viewModelScope being torn down on screen removal). It is
+                // not a save failure - rethrow so the parent job sees it
+                // and the cancellation propagates correctly. Surfacing it
+                // as a "Couldn't save" error would also lie to the user
+                // about a normal nav-away.
+                throw e
             } catch (e: Throwable) {
                 _saveError.value = e.localizedMessage ?: e.javaClass.simpleName
             } finally {
