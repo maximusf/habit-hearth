@@ -1,7 +1,5 @@
 package com.project.habithearth.model
 
-import com.project.habithearth.ui.map.BuildingUnlockCost
-
 /**
  * Pure-data view of the player's wallet, XP, and owned buildings.
  *

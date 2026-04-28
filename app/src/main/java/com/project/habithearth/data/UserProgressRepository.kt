@@ -12,6 +12,7 @@ import com.google.gson.Gson
 import com.google.gson.JsonArray
 import com.google.gson.JsonParser
 import com.google.gson.reflect.TypeToken
+import com.project.habithearth.data.proto.UserProgressProto
 import com.project.habithearth.ui.map.MainHubBuildingIds
 import com.project.habithearth.ui.state.GameUiState
 import kotlinx.coroutines.flow.Flow
@@ -64,6 +65,11 @@ data class AccountSettings(
 
 class UserProgressRepository(
     context: Context,
+    // Typed proto DataStore is injected so account-create / wipe flows can
+    // reset the new task + story slices alongside the legacy Gson blob. Until
+    // the second milestone deletes this repository, both stores need to be
+    // wiped together to avoid per-account state leaking across users.
+    private val protoDataStore: DataStore<UserProgressProto>,
 ) {
     private val dataStore = context.applicationContext.userProgressDataStore
     private val gson = Gson()
@@ -125,6 +131,11 @@ class UserProgressRepository(
                     ),
                 )
         }
+        // Wipe the typed proto store too. Without this, a "Create account"
+        // from the sign-in screen would inherit the previous user's tasks and
+        // story state while resetting their gem pools, mixing accounts during
+        // the migration window.
+        protoDataStore.updateData { UserProgressProto.DEFAULT }
     }
 
     /**
@@ -233,11 +244,15 @@ class UserProgressRepository(
         dataStore.edit { it[KEY_GAME_STATE_JSON] = json }
     }
 
-    /** Wipes all stored preferences (account, game, settings). Used when starting a new account from the sign-in screen. */
+    /** Wipes all stored preferences (account, game, settings) **and** the typed proto store (tasks, story).
+     * Used when starting a new account from the sign-in screen. Both stores
+     * have to flip together; otherwise the proto-side tasks/story would
+     * survive the wipe and leak into the next account. */
     suspend fun clearAllLocalData() {
         dataStore.edit { prefs ->
             prefs.clear()
         }
+        protoDataStore.updateData { UserProgressProto.DEFAULT }
     }
 
     companion object {

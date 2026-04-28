@@ -101,21 +101,39 @@ class TaskRepository(
         category: TaskCategory,
         buildingId: String?,
     ) {
+        val normalizedTitle = title.trim()
+        val normalizedNote = note.trim()
+        val normalizedCategory = category.name
         val normalizedBuilding = buildingId?.trim()?.takeIf { it.isNotEmpty() }.orEmpty()
         dataStore.updateData { current ->
+            // Walk the list and only rebuild it if a real edit landed. The
+            // updateData transform is the wrong place for short-circuit-style
+            // side effects (it can be re-run on retries), so we derive the
+            // "anything changed" decision from `current` alone on each pass.
+            var anyChanged = false
             val newTasks = current.tasks.map { proto ->
                 if (proto.id == taskId) {
-                    proto.copy(
-                        title = title.trim(),
-                        note = note.trim(),
-                        category = category.name,
-                        buildingId = normalizedBuilding,
-                    )
+                    val taskChanged =
+                        proto.title != normalizedTitle ||
+                            proto.note != normalizedNote ||
+                            proto.category != normalizedCategory ||
+                            proto.buildingId != normalizedBuilding
+                    if (taskChanged) {
+                        anyChanged = true
+                        proto.copy(
+                            title = normalizedTitle,
+                            note = normalizedNote,
+                            category = normalizedCategory,
+                            buildingId = normalizedBuilding,
+                        )
+                    } else {
+                        proto
+                    }
                 } else {
                     proto
                 }
             }
-            current.copy(tasks = newTasks)
+            if (anyChanged) current.copy(tasks = newTasks) else current
         }
     }
 
@@ -125,18 +143,24 @@ class TaskRepository(
      * re-checks shouldn't double-credit gems).
      */
     suspend fun setTaskCompleted(taskId: String, completed: Boolean): Boolean {
-        var changed = false
+        // Avoid mutating an external `var` from inside the updateData transform:
+        // DataStore may re-run the transform on contention, and a side effect
+        // captured on the first pass can outlive a retry that ends up returning
+        // `current` unchanged. Instead, snapshot the post-state at the end of
+        // updateData and derive the return value from comparing pre/post.
+        var localChanged = false
         dataStore.updateData { current ->
-            val newTasks = current.tasks.map { proto ->
-                if (proto.id == taskId && proto.isCompleted != completed) {
-                    changed = true
-                    proto.copy(isCompleted = completed)
-                } else {
-                    proto
+            val needsFlip = current.tasks.any { it.id == taskId && it.isCompleted != completed }
+            localChanged = needsFlip
+            if (!needsFlip) {
+                current
+            } else {
+                val newTasks = current.tasks.map { proto ->
+                    if (proto.id == taskId) proto.copy(isCompleted = completed) else proto
                 }
+                current.copy(tasks = newTasks)
             }
-            if (changed) current.copy(tasks = newTasks) else current
         }
-        return changed
+        return localChanged
     }
 }

@@ -9,9 +9,12 @@ import androidx.lifecycle.viewmodel.CreationExtras
 import com.project.habithearth.data.task.TaskRepository
 import com.project.habithearth.model.HabitTask
 import com.project.habithearth.model.TaskCategory
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -47,13 +50,26 @@ class TaskEditorViewModel(
 
     val isEditMode: Boolean = taskId != null
 
+    private val _isEditingTaskLoaded = MutableStateFlow(!isEditMode)
+
+    /**
+     * True once the editor has observed at least one emission from the
+     * underlying repo flow (or immediately, in new-task mode where there is
+     * no flow to wait on). Lets the UI distinguish "DataStore hasn't replied
+     * yet" from "the task we were asked to edit really doesn't exist", which
+     * matters because an invalid `taskId` route arg should snap navigation
+     * back rather than leave a permanently-blank editor.
+     */
+    val isEditingTaskLoaded: StateFlow<Boolean> = _isEditingTaskLoaded.asStateFlow()
+
     /**
      * Stream of the task being edited, or `null` for new-task mode and after a
      * concurrent delete. Cold flow upgraded to a [StateFlow] so the screen can
      * read an initial value synchronously when prefilling form fields.
      */
     val editingTask: StateFlow<HabitTask?> = (
-        taskId?.let { repo.observeTask(it) } ?: flowOf(null)
+        taskId?.let { repo.observeTask(it).onEach { _isEditingTaskLoaded.value = true } }
+            ?: flowOf(null)
         ).stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(stopTimeoutMillis = 5_000),

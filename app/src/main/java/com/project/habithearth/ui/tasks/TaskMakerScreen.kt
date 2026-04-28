@@ -98,25 +98,36 @@ fun TaskMakerScreen(
         }
     }
 
+    // The editor VM publishes a separate "loaded" signal so we can tell apart
+    // "first emission with a real task", "task vanished mid-edit", and the
+    // initial null before the StateFlow has flushed its first value. Without
+    // this, edit mode keyed off an invalid taskId would keep `seeded = false`
+    // forever and the deleted-task fallback below would never fire.
+    val isEditingTaskLoaded by editorVm.isEditingTaskLoaded.collectAsState()
+
     // In edit mode, observeTask emits null if the task was deleted out from
-    // under us; bail back to the previous screen so the editor doesn't sit on
-    // stale state.
-    LaunchedEffect(isEditMode, existingTask, seeded) {
-        if (isEditMode && seeded && existingTask == null) {
+    // under us (or the route arg pointed at an invalid id to begin with);
+    // either way, bail back so the editor doesn't sit on stale or empty state.
+    LaunchedEffect(isEditMode, isEditingTaskLoaded, existingTask) {
+        if (isEditMode && isEditingTaskLoaded && existingTask == null) {
             onBack()
         }
     }
 
-    LaunchedEffect(existingTask, isEditMode) {
+    LaunchedEffect(existingTask, isEditMode, isEditingTaskLoaded) {
         if (!seeded) {
             val task = existingTask
-            if (task != null) {
-                title = task.title
-                note = task.note
-                selectedCategory = task.category
-                selectedBuildingId = task.buildingId
-                seeded = true
-            } else if (!isEditMode) {
+            if (isEditMode) {
+                if (task != null) {
+                    title = task.title
+                    note = task.note
+                    selectedCategory = task.category
+                    selectedBuildingId = task.buildingId
+                    seeded = true
+                }
+                // If isEditingTaskLoaded is true but task is null, the
+                // LaunchedEffect above will navigate back; nothing to seed.
+            } else {
                 selectedBuildingId =
                     initialBuildingId?.takeIf { it in game.ownedBuildingIds }
                 seeded = true
@@ -271,13 +282,18 @@ fun TaskMakerScreen(
                         gameStateViewModel.applyRewardDelta(before.category, -before.rewardAmount)
                         gameStateViewModel.applyRewardDelta(selectedCategory, before.rewardAmount)
                     }
+                    // Pop only after the save has actually completed. Calling
+                    // onBack() synchronously after saveAsync used to cancel
+                    // the editor's viewModelScope mid-write (the back stack
+                    // entry, and therefore the VM, gets cleared on pop), so
+                    // slow DataStore writes lost edits.
                     editorVm.saveAsync(
                         title = title,
                         note = note,
                         category = selectedCategory,
                         buildingId = selectedBuildingId,
+                        onSaved = { onBack() },
                     )
-                    onBack()
                 },
                 enabled = title.isNotBlank(),
                 modifier = Modifier.fillMaxWidth(),

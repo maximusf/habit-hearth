@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -56,7 +57,12 @@ class TaskListViewModel(
         onTransition: ((HabitTask) -> Unit)? = null,
     ) {
         viewModelScope.launch {
-            val before = tasks.value.firstOrNull { it.id == taskId } ?: return@launch
+            // Read the task from the repo, not from `tasks.value`. `tasks` is a
+            // hot StateFlow shared with WhileSubscribed, so when only a sibling
+            // flow (e.g. tasksForBuilding) is being collected, `tasks.value`
+            // can stay at its initial empty value. Reading off the repo ensures
+            // the toggle is correct regardless of which screen is active.
+            val before = repo.observeTask(taskId).first() ?: return@launch
             val changed = repo.setTaskCompleted(taskId, completed)
             if (changed) onTransition?.invoke(before)
         }

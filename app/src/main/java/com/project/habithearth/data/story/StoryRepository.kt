@@ -42,16 +42,23 @@ class StoryRepository(
      * the signal to log "story started" exactly once).
      */
     suspend fun freezeCategory(category: TaskCategory): Boolean {
-        var froze = false
+        // Set `localFroze` to the freeze decision *every* invocation of the
+        // transform. DataStore may re-run the transform on contention, so the
+        // boolean must reflect whichever pass actually persisted - simply
+        // setting it to true on the freeze branch (without resetting on retries
+        // that took the no-op branch) would leak a stale `true` from an
+        // earlier attempt.
+        var localFroze = false
         dataStore.updateData { current ->
-            if (current.story.frozenCategory.isNotBlank()) {
+            val canFreeze = current.story.frozenCategory.isBlank()
+            localFroze = canFreeze
+            if (!canFreeze) {
                 current
             } else {
-                froze = true
                 current.copy(story = current.story.copy(frozenCategory = category.name))
             }
         }
-        return froze
+        return localFroze
     }
 
     /**
@@ -79,13 +86,17 @@ class StoryRepository(
      * scanning the choices list.
      */
     suspend fun recordChoice(choice: StoryChoice): Boolean {
-        var recorded = false
+        // See [freezeCategory] for why `localRecorded` is overwritten on every
+        // invocation of the transform: DataStore may re-run the lambda on
+        // write contention, and the return value has to track the pass that
+        // actually persisted.
+        var localRecorded = false
         dataStore.updateData { current ->
             val already = current.story.choices.any { it.plotPointIndex == choice.plotPointIndex }
+            localRecorded = !already
             if (already) {
                 current
             } else {
-                recorded = true
                 val nextReached = maxOf(
                     current.story.plotPointsReached,
                     choice.plotPointIndex + 1,
@@ -98,7 +109,7 @@ class StoryRepository(
                 )
             }
         }
-        return recorded
+        return localRecorded
     }
 
     /**

@@ -1,14 +1,12 @@
 package com.project.habithearth.ui.map
 
+import com.project.habithearth.model.BuildingUnlockCost
 import com.project.habithearth.model.TaskCategory
 
-/** Gems (or coins for unsorted / general buildings) required to unlock one map building. */
-const val VillageBuildingUnlockCost: Int = 50
-
-sealed class BuildingUnlockCost {
-    data class Gems(val category: TaskCategory, val amount: Int = VillageBuildingUnlockCost) : BuildingUnlockCost()
-    data class Coins(val amount: Int = VillageBuildingUnlockCost) : BuildingUnlockCost()
-}
+// BuildingUnlockCost (sealed) and VillageBuildingUnlockCost (constant) live in
+// model/ so domain types can reference them without the model layer depending
+// on ui/. The bridge-to-VillageBuilding helpers stay here because
+// VillageBuilding is a UI concept.
 
 fun VillageBuilding.unlockCost(): BuildingUnlockCost =
     when (category) {
@@ -24,7 +22,3 @@ fun BuildingUnlockCost.displayLabel(): String =
         is BuildingUnlockCost.Gems -> "$amount ${category.displayName.lowercase()} gems"
         is BuildingUnlockCost.Coins -> "$amount coins"
     }
-
-// canAfford / withUnlockCostPaid moved to model/ResourceProgress.kt in Phase 2.
-// Receiver type changed from GameUiState to ResourceProgress so unlock-cost
-// math no longer depends on the UI-state class.
