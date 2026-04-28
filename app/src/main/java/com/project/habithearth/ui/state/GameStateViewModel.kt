@@ -18,14 +18,17 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 data class GameUiState(
-    val strengthGems: Int = 12,
-    val wisdomGems: Int = 9,
-    val vitalityGems: Int = 15,
-    val spiritGems: Int = 8,
-    val coins: Int = 240,
-    val xpProgress: Float = 0.62f,
-    /** Map buildings the player has unlocked (starter hubs are merged in when loading a save). */
-    val ownedBuildingIds: Set<String> = emptySet(),
+    val strengthGems: Int = 0,
+    val wisdomGems: Int = 0,
+    val vitalityGems: Int = 0,
+    val spiritGems: Int = 0,
+    val coins: Int = 0,
+    val totalXp: Int = 0,
+    // Starter hubs (library/cottage/spa/guild/greenhouse) own at fresh-install
+    // time so the home tile of the map isn't a wall of locks. Saved games
+    // re-merge MainHubBuildingIds in loadGameState when the persisted set is
+    // empty, so this default and that load-time fixup stay in sync.
+    val ownedBuildingIds: Set<String> = MainHubBuildingIds,
 )
 
 class GameStateViewModel(
@@ -41,7 +44,7 @@ class GameStateViewModel(
         }
     }
 
-    /** Loads from disk, or default [GameUiState] if none. Safe to call after [UserProgressRepository.clearAllLocalData]. */
+    /** Loads from disk, or default [GameUiState] if none. */
     suspend fun reloadFromRepositoryNow() {
         _uiState.value = userProgressRepository.loadGameState() ?: GameUiState()
     }
@@ -65,7 +68,18 @@ class GameStateViewModel(
      */
     fun applyRewardDelta(category: TaskCategory, delta: Int) {
         if (delta == 0) return
-        _uiState.update { it.withResourceDelta(category, delta) }
+        _uiState.update { state ->
+            val withGems = state.withResourceDelta(category, delta)
+            // XP is monotonic: a fresh completion grants flat XP_PER_TASK,
+            // but uncompleting (delta < 0) does NOT refund XP. Keeps story
+            // gates from yo-yoing as users toggle tasks, and matches the
+            // "reading the chapter is permanent" feel discussed in design.
+            if (delta > 0) {
+                withGems.copy(totalXp = withGems.totalXp + XP_PER_TASK)
+            } else {
+                withGems
+            }
+        }
         persist()
     }
 
@@ -77,6 +91,50 @@ class GameStateViewModel(
             TaskCategory.SPIRIT -> copy(spiritGems = (spiritGems + delta).coerceAtLeast(0))
             TaskCategory.UNSORTED -> copy(coins = (coins + delta).coerceAtLeast(0))
         }
+    }
+
+    /**
+     * Debug-only resource minter. Applies signed deltas to each pool and the
+     * XP bar, then persists. Wired through Profile's debug panel; gated by
+     * BuildConfig.DEBUG at the call site so release builds never touch this.
+     * Pools clamp at 0; xp clamps to [0, 1].
+     */
+    fun debugAdjustResources(
+        strength: Int = 0,
+        wisdom: Int = 0,
+        vitality: Int = 0,
+        spirit: Int = 0,
+        coins: Int = 0,
+        xpDelta: Int = 0,
+    ) {
+        _uiState.update { s ->
+            s.copy(
+                strengthGems = (s.strengthGems + strength).coerceAtLeast(0),
+                wisdomGems = (s.wisdomGems + wisdom).coerceAtLeast(0),
+                vitalityGems = (s.vitalityGems + vitality).coerceAtLeast(0),
+                spiritGems = (s.spiritGems + spirit).coerceAtLeast(0),
+                coins = (s.coins + coins).coerceAtLeast(0),
+                totalXp = (s.totalXp + xpDelta).coerceAtLeast(0),
+            )
+        }
+        persist()
+    }
+
+    /** Debug-only: own every building in the village. */
+    fun debugUnlockAllBuildings() {
+        _uiState.update { s ->
+            val all = com.project.habithearth.ui.map.defaultVillageBuildings()
+                .map { it.id }
+                .toSet()
+            s.copy(ownedBuildingIds = s.ownedBuildingIds + all)
+        }
+        persist()
+    }
+
+    /** Debug-only: zero pools, re-seed starter hubs, clear xp. */
+    fun debugResetProgress() {
+        _uiState.value = GameUiState()
+        persist()
     }
 
     /**
@@ -119,7 +177,7 @@ val GameUiState.resources: ResourceProgress
         vitalityGems = vitalityGems,
         spiritGems = spiritGems,
         coins = coins,
-        xpProgress = xpProgress,
+        totalXp = totalXp,
         ownedBuildingIds = ownedBuildingIds,
     )
 
@@ -131,7 +189,7 @@ fun GameUiState.copyResources(rp: ResourceProgress): GameUiState =
         vitalityGems = rp.vitalityGems,
         spiritGems = rp.spiritGems,
         coins = rp.coins,
-        xpProgress = rp.xpProgress,
+        totalXp = rp.totalXp,
         ownedBuildingIds = rp.ownedBuildingIds,
     )
 

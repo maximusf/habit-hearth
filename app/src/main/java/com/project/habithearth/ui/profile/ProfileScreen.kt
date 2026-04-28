@@ -1,6 +1,5 @@
 package com.project.habithearth.ui.profile
 
-import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -20,7 +19,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Diamond
@@ -28,6 +26,8 @@ import androidx.compose.material.icons.filled.Paid
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -56,35 +56,14 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.SavedStateHandle
+import com.project.habithearth.BuildConfig
 import com.project.habithearth.data.AccountSettings
 import com.project.habithearth.data.UserProgressRepository
 import com.project.habithearth.ui.components.VerticalScrollIndicator
+import com.project.habithearth.ui.state.GameStateViewModel
 import com.project.habithearth.ui.state.GameUiState
-import com.project.habithearth.ui.theme.HabitHearthTheme
 import kotlinx.coroutines.launch
-
-// Profile/settings screen
-// profile with stats
-// account
-    // display name
-    // username
-
-// general
-// preferences
-    //push notifications
-    // vacation mode
-    // theme
-    // language
-    // text size
-// security
-    //password
-
-// log out
 
 private data class ProfilePicturePlaceholder(
     val id: Int,
@@ -115,7 +94,9 @@ private fun profileTextButtonColors() = ButtonDefaults.textButtonColors(
 fun ProfileScreen(
     gameUiState: GameUiState,
     userProgressRepository: UserProgressRepository,
-    onLogoutSuccess: () -> Unit,
+    gameStateViewModel: GameStateViewModel,
+    debugPanelVisible: Boolean,
+    onHideDebugPanel: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val scrollState = rememberScrollState()
@@ -127,17 +108,6 @@ fun ProfileScreen(
         displayNameDraft = account.displayName
     }
 
-    var usernameDraft by remember { mutableStateOf(account.username) }
-    LaunchedEffect(account.username) {
-        usernameDraft = account.username
-    }
-
-    var addLoginUsername by remember { mutableStateOf("") }
-    var addLoginPassword by remember { mutableStateOf("") }
-    var addLoginConfirm by remember { mutableStateOf("") }
-
-    var showChangePassword by remember { mutableStateOf(false) }
-    var showLogoutConfirm by remember { mutableStateOf(false) }
     var notice by remember { mutableStateOf<String?>(null) }
 
     val themeOptions = remember { listOf("System default", "Light", "Dark") }
@@ -153,54 +123,6 @@ fun ProfileScreen(
         account.profileAvatarId.coerceIn(0, profilePicturePlaceholders.lastIndex),
     ]
     var showProfileGallery by remember { mutableStateOf(false) }
-
-    if (showChangePassword) {
-        ChangePasswordDialog(
-            onDismiss = { showChangePassword = false },
-            onSubmit = { current, newPassword ->
-                scope.launch {
-                    val ok = userProgressRepository.changePassword(current, newPassword)
-                    showChangePassword = false
-                    notice = if (ok) {
-                        "Password updated."
-                    } else {
-                        "Could not change password. Check your current password and new password length."
-                    }
-                }
-            },
-        )
-    }
-
-    if (showLogoutConfirm) {
-        AlertDialog(
-            onDismissRequest = { showLogoutConfirm = false },
-            title = { Text("Sign out?") },
-            text = {
-                Text("You'll need your username and password to open the app again.")
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showLogoutConfirm = false
-                        scope.launch {
-                            if (userProgressRepository.logout()) {
-                                onLogoutSuccess()
-                            } else {
-                                notice = "Add a username and password in Profile first to sign out."
-                            }
-                        }
-                    },
-                ) {
-                    Text("Sign out", color = MaterialTheme.colorScheme.error)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showLogoutConfirm = false }) {
-                    Text("Cancel")
-                }
-            },
-        )
-    }
 
     if (showProfileGallery) {
         ProfilePictureGalleryDialog(
@@ -232,10 +154,6 @@ fun ProfileScreen(
                 style = MaterialTheme.typography.headlineMedium,
             )
 
-
-
-
-
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -244,7 +162,7 @@ fun ProfileScreen(
                 Column(
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                     modifier = Modifier.weight(1f),
-                ){
+                ) {
                     ProfileAvatar(
                         selected = selectedProfile,
                         onClick = { showProfileGallery = true },
@@ -261,7 +179,6 @@ fun ProfileScreen(
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                     modifier = Modifier.weight(1f),
                 ) {
-                    // list of resources
                     ResourceLine(
                         label = "Strength gem",
                         value = gameUiState.strengthGems.toString(),
@@ -269,7 +186,6 @@ fun ProfileScreen(
                             GemPlaceholder(
                                 backgroundColor = Color(0xFFB85C5C),
                                 content = {
-                                    // need to change image to the gem_strength.png
                                     Icon(
                                         imageVector = Icons.Filled.Diamond,
                                         contentDescription = null,
@@ -285,10 +201,8 @@ fun ProfileScreen(
                         value = gameUiState.wisdomGems.toString(),
                         leading = {
                             GemPlaceholder(
-
                                 backgroundColor = Color(0xFF5C6BB8),
                                 content = {
-                                    // need to change image to the gem_wisdom.png
                                     Icon(
                                         imageVector = Icons.Filled.Diamond,
                                         contentDescription = null,
@@ -306,7 +220,6 @@ fun ProfileScreen(
                             GemPlaceholder(
                                 backgroundColor = Color(0xFF5CB86B),
                                 content = {
-                                    // need to change image to the gem_vitality.png
                                     Icon(
                                         imageVector = Icons.Filled.Diamond,
                                         contentDescription = null,
@@ -324,12 +237,27 @@ fun ProfileScreen(
                             GemPlaceholder(
                                 backgroundColor = Color(0xFF8B5CB8),
                                 content = {
-                                    // need to change image to the gem_spirit.png
                                     Icon(
                                         imageVector = Icons.Filled.Diamond,
                                         contentDescription = null,
                                         modifier = Modifier.size(14.dp),
                                         tint = Color.White.copy(alpha = 0.95f),
+                                    )
+                                },
+                            )
+                        },
+                    )
+                    ResourceLine(
+                        label = "Level",
+                        value = "Lv ${com.project.habithearth.ui.state.levelFor(gameUiState.totalXp)} (${gameUiState.totalXp} XP)",
+                        leading = {
+                            GemPlaceholder(
+                                backgroundColor = Color(0xFF8B6F47),
+                                content = {
+                                    Text(
+                                        text = "L",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = Color.White.copy(alpha = 0.95f),
                                     )
                                 },
                             )
@@ -342,7 +270,6 @@ fun ProfileScreen(
                             GemPlaceholder(
                                 backgroundColor = Color(0xFFC9A227),
                                 content = {
-                                    // need to change image to a coin
                                     Icon(
                                         imageVector = Icons.Filled.Paid,
                                         contentDescription = null,
@@ -358,7 +285,6 @@ fun ProfileScreen(
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
 
-
             Text(
                 text = "Preferences",
                 style = MaterialTheme.typography.titleLarge,
@@ -372,8 +298,6 @@ fun ProfileScreen(
                 },
             )
 
-            //HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-
             SettingsToggleRow(
                 label = "Vacation mode",
                 checked = account.vacationMode,
@@ -381,8 +305,6 @@ fun ProfileScreen(
                     scope.launch { userProgressRepository.setVacationMode(enabled) }
                 },
             )
-
-           // HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
 
             SettingsDropdownRow(
                 label = "Theme mode",
@@ -396,8 +318,6 @@ fun ProfileScreen(
                 },
             )
 
-           // HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-
             SettingsDropdownRow(
                 label = "Language",
                 options = languageOptions,
@@ -409,8 +329,6 @@ fun ProfileScreen(
                     languageExpanded = false
                 },
             )
-
-           // HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
 
             SettingsDropdownRow(
                 label = "Text size",
@@ -424,20 +342,13 @@ fun ProfileScreen(
                 },
             )
 
-           // HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-
             HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
             Text(
                 text = "Account",
                 style = MaterialTheme.typography.titleLarge,
             )
             Text(
-                text = "Username and password for signing in. Stored only on this device.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Text(
-                text = "Account & settings are saved on this device.",
+                text = "Display name shown on the home screen. Stored only on this device.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -452,135 +363,12 @@ fun ProfileScreen(
                 onClick = {
                     scope.launch {
                         userProgressRepository.setDisplayName(displayNameDraft)
+                        notice = "Display name saved."
                     }
                 },
                 colors = profileTextButtonColors(),
             ) {
                 Text("Save display name")
-            }
-
-            if (account.hasLoginCredentials) {
-                OutlinedTextField(
-                    value = usernameDraft,
-                    onValueChange = { usernameDraft = it },
-                    label = { Text("Username") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                TextButton(
-                    onClick = {
-                        scope.launch {
-                            userProgressRepository.setUsername(usernameDraft)
-                            notice = "Username saved."
-                        }
-                    },
-                    enabled = usernameDraft.isNotBlank(),
-                    colors = profileTextButtonColors(),
-                ) {
-                    Text("Save username")
-                }
-                Text(
-                    text = "Password",
-                    style = MaterialTheme.typography.titleSmall,
-                )
-                TextButton(
-                    onClick = { showChangePassword = true },
-                    colors = profileTextButtonColors(),
-                ) {
-                    Text("Change password")
-                }
-            } else {
-                Text(
-                    text = "This profile was created before sign-in was added. Choose a username and password to protect your session when you sign out.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                OutlinedTextField(
-                    value = addLoginUsername,
-                    onValueChange = { addLoginUsername = it },
-                    label = { Text("Username") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = addLoginPassword,
-                    onValueChange = { addLoginPassword = it },
-                    label = { Text("Password") },
-                    singleLine = true,
-                    visualTransformation = PasswordVisualTransformation(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = addLoginConfirm,
-                    onValueChange = { addLoginConfirm = it },
-                    label = { Text("Confirm password") },
-                    singleLine = true,
-                    visualTransformation = PasswordVisualTransformation(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                TextButton(
-                    onClick = {
-                        when {
-                            addLoginUsername.isBlank() -> notice = "Enter a username."
-                            addLoginPassword.length < UserProgressRepository.MIN_PASSWORD_LENGTH ->
-                                notice = "Password must be at least ${UserProgressRepository.MIN_PASSWORD_LENGTH} characters."
-                            addLoginPassword != addLoginConfirm -> notice = "Passwords don't match."
-                            else -> {
-                                scope.launch {
-                                    val ok = userProgressRepository.setLoginCredentials(
-                                        addLoginUsername,
-                                        addLoginPassword,
-                                    )
-                                    notice = if (ok) {
-                                        addLoginPassword = ""
-                                        addLoginConfirm = ""
-                                        "Sign-in saved. You can use Sign out above."
-                                    } else {
-                                        "Could not save sign-in."
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = profileTextButtonColors(),
-                ) {
-                    Text("Save sign-in")
-                }
-            }
-
-            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-            Text(
-                text = "Session",
-                style = MaterialTheme.typography.titleMedium,
-            )
-//            Text(
-//                text = "Sign out locks the app until you sign in again with your username and password.",
-//                style = MaterialTheme.typography.bodySmall,
-//                color = MaterialTheme.colorScheme.onSurfaceVariant,
-//            )
-            if (account.hasLoginCredentials) {
-                Button(
-                    onClick = { showLogoutConfirm = true },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer,
-                        contentColor = MaterialTheme.colorScheme.onErrorContainer,
-                    ),
-                ) {
-                    Text("Sign out")
-                }
-            } else {
-                Text(
-                    text = "Add sign-in credentials above to enable sign out.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
             }
 
             notice?.let { msg ->
@@ -589,6 +377,28 @@ fun ProfileScreen(
                     text = msg,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
+                )
+            }
+
+            if (BuildConfig.DEBUG && debugPanelVisible) {
+                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                DebugResourcePanel(
+                    onAdjust = { s, w, v, sp, c, x ->
+                        gameStateViewModel.debugAdjustResources(
+                            strength = s,
+                            wisdom = w,
+                            vitality = v,
+                            spirit = sp,
+                            coins = c,
+                            xpDelta = x,
+                        )
+                    },
+                    onUnlockAll = { gameStateViewModel.debugUnlockAllBuildings() },
+                    onReset = { gameStateViewModel.debugResetProgress() },
+                    onHide = onHideDebugPanel,
+                    currentLevel = com.project.habithearth.ui.state.levelFor(gameUiState.totalXp),
+                    xpInLevel = com.project.habithearth.ui.state.xpInLevel(gameUiState.totalXp),
+                    totalXp = gameUiState.totalXp,
                 )
             }
 
@@ -838,6 +648,103 @@ private fun SettingsToggleRow(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
+private fun DebugResourcePanel(
+    onAdjust: (s: Int, w: Int, v: Int, sp: Int, c: Int, xp: Int) -> Unit,
+    onUnlockAll: () -> Unit,
+    onReset: () -> Unit,
+    onHide: () -> Unit,
+    currentLevel: Int,
+    xpInLevel: Int,
+    totalXp: Int,
+) {
+    val steps = listOf(1, 10, 100)
+    var step by remember { mutableStateOf(10) }
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "Debug",
+                style = MaterialTheme.typography.titleLarge,
+            )
+            TextButton(onClick = onHide, colors = profileTextButtonColors()) {
+                Text("Hide")
+            }
+        }
+        Text(
+            text = "Hidden by default. Tap the Profile tab 7 times to reveal again. Stripped from release builds.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "Step",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            steps.forEach { s ->
+                FilterChip(
+                    selected = step == s,
+                    onClick = { step = s },
+                    label = { Text("+$s") },
+                )
+            }
+        }
+
+        DebugRow("Strength", { onAdjust(step, 0, 0, 0, 0, 0) }, { onAdjust(-step, 0, 0, 0, 0, 0) })
+        DebugRow("Wisdom", { onAdjust(0, step, 0, 0, 0, 0) }, { onAdjust(0, -step, 0, 0, 0, 0) })
+        DebugRow("Vitality", { onAdjust(0, 0, step, 0, 0, 0) }, { onAdjust(0, 0, -step, 0, 0, 0) })
+        DebugRow("Spirit", { onAdjust(0, 0, 0, step, 0, 0) }, { onAdjust(0, 0, 0, -step, 0, 0) })
+        DebugRow("Coins", { onAdjust(0, 0, 0, 0, step, 0) }, { onAdjust(0, 0, 0, 0, -step, 0) })
+        DebugRow(
+            label = "XP (Lv $currentLevel · $xpInLevel/${com.project.habithearth.ui.state.XP_PER_LEVEL}, total $totalXp)",
+            onPlus = { onAdjust(0, 0, 0, 0, 0, step) },
+            onMinus = { onAdjust(0, 0, 0, 0, 0, -step) },
+        )
+
+        Spacer(modifier = Modifier.height(4.dp))
+        OutlinedButton(
+            onClick = onUnlockAll,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text("Unlock all buildings")
+        }
+        Button(
+            onClick = onReset,
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.errorContainer,
+                contentColor = MaterialTheme.colorScheme.onErrorContainer,
+            ),
+        ) {
+            Text("Reset progress")
+        }
+    }
+}
+
+@Composable
+private fun DebugRow(label: String, onPlus: () -> Unit, onMinus: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(text = label, style = MaterialTheme.typography.bodyLarge)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = onMinus) { Text("-") }
+            OutlinedButton(onClick = onPlus) { Text("+") }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
 private fun SettingsDropdownRow(
     label: String,
     options: List<String>,
@@ -880,92 +787,3 @@ private fun SettingsDropdownRow(
         }
     }
 }
-
-@Composable
-private fun ChangePasswordDialog(
-    onDismiss: () -> Unit,
-    onSubmit: (currentPassword: String, newPassword: String) -> Unit,
-) {
-    var currentPassword by remember { mutableStateOf("") }
-    var newPassword by remember { mutableStateOf("") }
-    var confirmPassword by remember { mutableStateOf("") }
-    var localError by remember { mutableStateOf<String?>(null) }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Change password") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    value = currentPassword,
-                    onValueChange = {
-                        currentPassword = it
-                        localError = null
-                    },
-                    label = { Text("Current password") },
-                    singleLine = true,
-                    visualTransformation = PasswordVisualTransformation(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                OutlinedTextField(
-                    value = newPassword,
-                    onValueChange = {
-                        newPassword = it
-                        localError = null
-                    },
-                    label = { Text("New password") },
-                    singleLine = true,
-                    visualTransformation = PasswordVisualTransformation(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                OutlinedTextField(
-                    value = confirmPassword,
-                    onValueChange = {
-                        confirmPassword = it
-                        localError = null
-                    },
-                    label = { Text("Confirm new password") },
-                    singleLine = true,
-                    visualTransformation = PasswordVisualTransformation(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                localError?.let { msg ->
-                    Text(
-                        text = msg,
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = {
-                    when {
-                        newPassword.length < UserProgressRepository.MIN_PASSWORD_LENGTH -> {
-                            localError =
-                                "New password must be at least ${UserProgressRepository.MIN_PASSWORD_LENGTH} characters."
-                        }
-                        newPassword != confirmPassword -> {
-                            localError = "New passwords don't match."
-                        }
-                        else -> onSubmit(currentPassword, newPassword)
-                    }
-                },
-                colors = profileTextButtonColors(),
-            ) {
-                Text("Update")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss, colors = profileTextButtonColors()) {
-                Text("Cancel")
-            }
-        },
-    )
-}
-
-

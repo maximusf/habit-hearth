@@ -15,7 +15,7 @@ data class ResourceProgress(
     val vitalityGems: Int = 0,
     val spiritGems: Int = 0,
     val coins: Int = 0,
-    val xpProgress: Float = 0f,
+    val totalXp: Int = 0,
     val ownedBuildingIds: Set<String> = emptySet(),
 )
 

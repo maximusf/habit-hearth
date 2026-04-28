@@ -55,7 +55,7 @@ fun TopResourceBar(
     vitalityGems: Int = 0,
     spiritGems: Int = 0,
     coins: Int = 0,
-    xpProgress: Float = 0.3f,
+    totalXp: Int = 0,
     modifier: Modifier = Modifier,
 ) {
     val isLandscape =
@@ -160,13 +160,16 @@ fun TopResourceBar(
             Column(
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
+                val level = com.project.habithearth.ui.state.levelFor(totalXp)
+                val inLevel = com.project.habithearth.ui.state.xpInLevel(totalXp)
+                val perLevel = com.project.habithearth.ui.state.XP_PER_LEVEL
                 Text(
-                    text = "XP",
+                    text = "Lv $level · $inLevel/$perLevel",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 LinearProgressIndicator(
-                    progress = { xpProgress.coerceIn(0f, 1f) },
+                    progress = { inLevel.toFloat() / perLevel.toFloat() },
                     modifier = Modifier.width(120.dp),
                 )
             }
@@ -278,7 +281,7 @@ fun TopChromeWithMenu(
     vitalityGems: Int = 0,
     spiritGems: Int = 0,
     coins: Int = 0,
-    xpProgress: Float = 0.32f,
+    totalXp: Int = 0,
 ) {
     Column(modifier = modifier.fillMaxWidth()) {
         TopResourceBar(
@@ -287,7 +290,7 @@ fun TopChromeWithMenu(
             vitalityGems = vitalityGems,
             spiritGems = spiritGems,
             coins = coins,
-            xpProgress = xpProgress,
+            totalXp = totalXp,
         )
         Surface(
             tonalElevation = 2.dp,

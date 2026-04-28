@@ -107,7 +107,7 @@ data class ProgressProto(
     @ProtoNumber(3) val vitalityGems: Int = 0,
     @ProtoNumber(4) val spiritGems: Int = 0,
     @ProtoNumber(5) val coins: Int = 0,
-    @ProtoNumber(6) val xpProgress: Float = 0f,
+    @ProtoNumber(6) val totalXp: Int = 0,
     @ProtoNumber(7) val ownedBuildingIds: List<String> = emptyList(),
 )
 

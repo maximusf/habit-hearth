@@ -29,7 +29,7 @@ class HabitHearthApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
-        userProgressRepository = UserProgressRepository(this, userProgressProtoDataStore)
+        userProgressRepository = UserProgressRepository(this)
         taskRepository = TaskRepository(userProgressProtoDataStore)
     }
 }
