@@ -18,19 +18,17 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.project.habithearth.data.UserProgressRepository
+import com.project.habithearth.HabitHearthApplication
 import com.project.habithearth.ui.components.HabitTaskRowCard
 import com.project.habithearth.ui.components.VerticalScrollIndicator
 import com.project.habithearth.ui.state.GameStateViewModel
-import com.project.habithearth.ui.state.GameStateViewModelFactory
-import com.project.habithearth.ui.theme.HabitHearthTheme
+import com.project.habithearth.ui.tasks.TaskListViewModel
+import com.project.habithearth.ui.tasks.TaskListViewModelFactory
 import com.project.habithearth.ui.theme.HearthPanelWarm
 
 @Composable
@@ -41,7 +39,11 @@ fun HomeScreen(
     gameStateViewModel: GameStateViewModel,
     modifier: Modifier = Modifier,
 ) {
-    val game by gameStateViewModel.uiState.collectAsState()
+    val app = LocalContext.current.applicationContext as HabitHearthApplication
+    val taskListVm: TaskListViewModel = viewModel(
+        factory = TaskListViewModelFactory(app.taskRepository),
+    )
+    val tasks by taskListVm.tasks.collectAsState()
     val scrollState = rememberScrollState()
 
     Column(
@@ -74,15 +76,26 @@ fun HomeScreen(
                     .verticalScroll(scrollState),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                game.tasks.forEach { task ->
-                        HabitTaskRowCard(
-                            task = task,
-                            onCompletedChange = { checked ->
-                                gameStateViewModel.setTaskCompleted(task.id, checked)
-                            },
-                            onOpenEdit = { onEditTask(task.id) },
-                        )
-                    }
+                tasks.forEach { task ->
+                    HabitTaskRowCard(
+                        task = task,
+                        onCompletedChange = { checked ->
+                            // TaskListViewModel persists the flip; the
+                            // onTransition callback only fires when the
+                            // persisted state actually changed, so we don't
+                            // double-credit gems on a no-op tap. Reward-pool
+                            // bookkeeping stays on the legacy
+                            // GameStateViewModel until ProgressRepository
+                            // lands (PLAN.md second milestone).
+                            taskListVm.setCompleted(task.id, checked) { before ->
+                                val delta =
+                                    if (checked) before.rewardAmount else -before.rewardAmount
+                                gameStateViewModel.applyRewardDelta(before.category, delta)
+                            }
+                        },
+                        onOpenEdit = { onEditTask(task.id) },
+                    )
+                }
                 Spacer(modifier = Modifier.height(8.dp))
             }
             VerticalScrollIndicator(
@@ -104,19 +117,3 @@ fun HomeScreen(
         }
     }
 }
-
-//@Preview(showBackground = true, showSystemUi = true)
-//@Composable
-//private fun HomeScreenPreview() {
-//    val context = LocalContext.current
-//    val repo = remember { UserProgressRepository(context.applicationContext) }
-//    val gameVm: GameStateViewModel = viewModel(factory = GameStateViewModelFactory(repo))
-//    HabitHearthTheme {
-//        HomeScreen(
-//            welcomeDisplayName = "Traveler",
-//            onOpenTasks = {},
-//            onEditTask = {},
-//            gameStateViewModel = gameVm,
-//        )
-//    }
-//}

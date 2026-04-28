@@ -1,15 +1,12 @@
 package com.project.habithearth.ui.map
 
-import com.project.habithearth.ui.model.TaskCategory
-import com.project.habithearth.ui.state.GameUiState
+import com.project.habithearth.model.BuildingUnlockCost
+import com.project.habithearth.model.TaskCategory
 
-/** Gems (or coins for unsorted / general buildings) required to unlock one map building. */
-const val VillageBuildingUnlockCost: Int = 50
-
-sealed class BuildingUnlockCost {
-    data class Gems(val category: TaskCategory, val amount: Int = VillageBuildingUnlockCost) : BuildingUnlockCost()
-    data class Coins(val amount: Int = VillageBuildingUnlockCost) : BuildingUnlockCost()
-}
+// BuildingUnlockCost (sealed) and VillageBuildingUnlockCost (constant) live in
+// model/ so domain types can reference them without the model layer depending
+// on ui/. The bridge-to-VillageBuilding helpers stay here because
+// VillageBuilding is a UI concept.
 
 fun VillageBuilding.unlockCost(): BuildingUnlockCost =
     when (category) {
@@ -24,30 +21,4 @@ fun BuildingUnlockCost.displayLabel(): String =
     when (this) {
         is BuildingUnlockCost.Gems -> "$amount ${category.displayName.lowercase()} gems"
         is BuildingUnlockCost.Coins -> "$amount coins"
-    }
-
-fun GameUiState.canAfford(cost: BuildingUnlockCost): Boolean =
-    when (cost) {
-        is BuildingUnlockCost.Gems ->
-            when (cost.category) {
-                TaskCategory.STRENGTH -> strengthGems >= cost.amount
-                TaskCategory.WISDOM -> wisdomGems >= cost.amount
-                TaskCategory.VITALITY -> vitalityGems >= cost.amount
-                TaskCategory.SPIRIT -> spiritGems >= cost.amount
-                TaskCategory.UNSORTED -> false
-            }
-        is BuildingUnlockCost.Coins -> coins >= cost.amount
-    }
-
-fun GameUiState.withUnlockCostPaid(cost: BuildingUnlockCost): GameUiState =
-    when (cost) {
-        is BuildingUnlockCost.Gems ->
-            when (cost.category) {
-                TaskCategory.STRENGTH -> copy(strengthGems = (strengthGems - cost.amount).coerceAtLeast(0))
-                TaskCategory.WISDOM -> copy(wisdomGems = (wisdomGems - cost.amount).coerceAtLeast(0))
-                TaskCategory.VITALITY -> copy(vitalityGems = (vitalityGems - cost.amount).coerceAtLeast(0))
-                TaskCategory.SPIRIT -> copy(spiritGems = (spiritGems - cost.amount).coerceAtLeast(0))
-                TaskCategory.UNSORTED -> this
-            }
-        is BuildingUnlockCost.Coins -> copy(coins = (coins - cost.amount).coerceAtLeast(0))
     }

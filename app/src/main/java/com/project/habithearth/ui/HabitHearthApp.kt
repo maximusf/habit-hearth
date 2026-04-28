@@ -287,21 +287,17 @@ fun HabitHearthApp(modifier: Modifier = Modifier) {
                             arguments = listOf(
                                 navArgument("buildingId") { type = NavType.StringType },
                             ),
-                        ) { entry ->
-                            val buildingId = entry.arguments?.getString("buildingId")
-                            if (buildingId != null) {
-                                TaskMakerScreen(
-                                    taskId = null,
-                                    initialBuildingId = buildingId,
-                                    onBack = { navController.popBackStack() },
-                                    gameStateViewModel = gameVm,
-                                )
-                            }
+                        ) {
+                            // TaskEditorViewModel reads buildingId off the
+                            // back-stack entry's SavedStateHandle, so this
+                            // composable doesn't need to forward route args.
+                            TaskMakerScreen(
+                                onBack = { navController.popBackStack() },
+                                gameStateViewModel = gameVm,
+                            )
                         }
                         composable(TaskMakerRoute) {
                             TaskMakerScreen(
-                                taskId = null,
-                                initialBuildingId = null,
                                 onBack = { navController.popBackStack() },
                                 gameStateViewModel = gameVm,
                             )
@@ -311,16 +307,11 @@ fun HabitHearthApp(modifier: Modifier = Modifier) {
                             arguments = listOf(
                                 navArgument("taskId") { type = NavType.StringType },
                             ),
-                        ) { entry ->
-                            val id = entry.arguments?.getString("taskId")
-                            if (id != null) {
-                                TaskMakerScreen(
-                                    taskId = id,
-                                    initialBuildingId = null,
-                                    onBack = { navController.popBackStack() },
-                                    gameStateViewModel = gameVm,
-                                )
-                            }
+                        ) {
+                            TaskMakerScreen(
+                                onBack = { navController.popBackStack() },
+                                gameStateViewModel = gameVm,
+                            )
                         }
                     }
                 }

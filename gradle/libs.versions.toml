@@ -10,7 +10,16 @@ kotlin = "2.2.10"
 composeBom = "2024.09.00"
 navigationCompose = "2.8.4"
 lifecycleViewmodelCompose = "2.10.0"
-datastorePreferences = "1.1.1"
+# DataStore Preferences and typed DataStore share a version. Both bumped from 1.1.1
+# to 1.2.1 in Phase 1 of the DataStore refactor (see PLAN.md).
+datastorePreferences = "1.2.1"
+datastore = "1.2.1"
+# kotlinx.serialization runtime (ProtoBuf encoder used as the wire format for
+# UserProgressSerializer). Phase 1 originally planned to use the standard
+# protobuf-gradle-plugin + protobuf-javalite combo, but protobuf-gradle-plugin
+# 0.9.5 still calls the removed AGP `BaseExtension` API and fails to apply on
+# AGP 9.x. Fallback was pre-approved in PLAN.md risk #2.
+kotlinxSerialization = "1.7.3"
 gson = "2.11.0"
 generativeai = "0.9.0"
 
@@ -32,10 +41,18 @@ androidx-compose-material3 = { group = "androidx.compose.material3", name = "mat
 androidx-navigation-compose = { group = "androidx.navigation", name = "navigation-compose", version.ref = "navigationCompose" }
 androidx-lifecycle-viewmodel-compose = { group = "androidx.lifecycle", name = "lifecycle-viewmodel-compose", version.ref = "lifecycleViewmodelCompose" }
 androidx-datastore-preferences = { group = "androidx.datastore", name = "datastore-preferences", version.ref = "datastorePreferences" }
+# Typed DataStore. Pairs with UserProgressSerializer to persist UserProgressProto.
+androidx-datastore = { group = "androidx.datastore", name = "datastore", version.ref = "datastore" }
+# kotlinx.serialization ProtoBuf encoder used by UserProgressSerializer. Chosen
+# over protobuf-javalite because the protobuf-gradle-plugin is incompatible
+# with AGP 9.x (see PLAN.md risk #2).
+kotlinx-serialization-protobuf = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-protobuf", version.ref = "kotlinxSerialization" }
 gson = { group = "com.google.code.gson", name = "gson", version.ref = "gson" }
 google-ai-generativeai = { group = "com.google.ai.client.generativeai", name = "generativeai", version.ref = "generativeai" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
-
+# Generates @Serializable companion serializers at compile time. Required for
+# UserProgressProto to be encoded by kotlinx.serialization ProtoBuf.
+kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }

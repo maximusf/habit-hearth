@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -102,25 +101,7 @@ private fun PortraitStoryLayout(
 
         Spacer(Modifier.height(12.dp))
 
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .aspectRatio(16f / 9f)
-                .clip(RoundedCornerShape(12.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant)
-                .border(
-                    width = 1.dp,
-                    color = MaterialTheme.colorScheme.outline,
-                    shape = RoundedCornerShape(12.dp),
-                ),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text = "Illustration",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
+        StoryIllustration()
 
         Spacer(Modifier.height(12.dp))
 
@@ -267,25 +248,7 @@ private fun LandscapeStoryLayout(
 
                 Spacer(Modifier.height(8.dp))
 
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .aspectRatio(4f / 3f)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(MaterialTheme.colorScheme.surfaceVariant)
-                        .border(
-                            width = 1.dp,
-                            color = MaterialTheme.colorScheme.outline,
-                            shape = RoundedCornerShape(12.dp),
-                        ),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = "Illustration",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+                StoryIllustration()
             }
 
             // Page indicator + prev button at bottom of left page
@@ -478,5 +441,54 @@ private fun PageNavigation(
                 contentDescription = "Next page",
             )
         }
+    }
+}
+
+// ── Illustration slot ──
+
+/**
+ * Square art slot, fixed dp size so portrait and landscape render the same
+ * physical box. Once art assets land, replace the placeholder Box body with
+ * an [androidx.compose.foundation.Image] driven by the current plot point /
+ * title-card index. Master art is authored at 1024x1024 so the same asset
+ * serves both orientations without re-cropping; the safe zone is the full
+ * square because the renderer is also square.
+ *
+ * Plot-point art mapping (see PLAN.md story persistence design):
+ *   title  -> R.drawable.story_title          (shown on the empty/begin state)
+ *   p0     -> R.drawable.story_p0             (village square at sunrise)
+ *   p1     -> R.drawable.story_p1             (garden wall close-up)
+ *   p2     -> R.drawable.story_p2             (town center midday)
+ *   p3     -> R.drawable.story_p3             (hot springs afternoon)
+ *   p4     -> R.drawable.story_p4             (festival night)
+ */
+private val StoryIllustrationSize = 280.dp
+
+@Composable
+private fun StoryIllustration(modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier
+            .size(StoryIllustrationSize)
+            .clip(RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .border(
+                width = 1.dp,
+                color = MaterialTheme.colorScheme.outline,
+                shape = RoundedCornerShape(12.dp),
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        // Placeholder until art lands. Swap to:
+        //   Image(
+        //       painter = painterResource(currentPlotPointDrawable),
+        //       contentDescription = null,
+        //       modifier = Modifier.fillMaxSize(),
+        //       contentScale = ContentScale.Crop,
+        //   )
+        Text(
+            text = "Illustration",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
