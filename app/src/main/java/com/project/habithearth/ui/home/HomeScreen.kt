@@ -29,7 +29,6 @@ import com.project.habithearth.ui.components.VerticalScrollIndicator
 import com.project.habithearth.ui.state.GameStateViewModel
 import com.project.habithearth.ui.tasks.TaskListViewModel
 import com.project.habithearth.ui.tasks.TaskListViewModelFactory
-import com.project.habithearth.ui.theme.HearthPanelWarm
 
 @Composable
 fun HomeScreen(
@@ -49,7 +48,7 @@ fun HomeScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(HearthPanelWarm)
+            .background(MaterialTheme.colorScheme.background)
             .padding(horizontal = 16.dp),
     ) {
         Text(

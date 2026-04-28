@@ -9,7 +9,7 @@ import androidx.compose.ui.Modifier
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.project.habithearth.ui.HabitHearthApp
-import com.project.habithearth.ui.theme.HabitHearthTheme
+import com.example.compose.AppTheme
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -21,7 +21,7 @@ class MainActivity : ComponentActivity() {
                 WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         }
         setContent {
-            HabitHearthTheme {
+            AppTheme {
                 HabitHearthApp(modifier = Modifier.fillMaxSize())
             }
         }
