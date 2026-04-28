@@ -3,6 +3,8 @@ import java.util.Properties
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
+    // Required so @Serializable on UserProgressProto generates a serializer.
+    alias(libs.plugins.kotlin.serialization)
 }
 
 val localProperties = Properties()
@@ -59,6 +61,10 @@ dependencies {
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.datastore.preferences)
+    // Typed DataStore + kotlinx.serialization ProtoBuf encoder. Pair powers
+    // UserProgressSerializer (see PLAN.md Phase 1, risk #2 fallback).
+    implementation(libs.androidx.datastore)
+    implementation(libs.kotlinx.serialization.protobuf)
     implementation(libs.gson)
     implementation(libs.google.ai.generativeai)
     implementation(platform(libs.androidx.compose.bom))
