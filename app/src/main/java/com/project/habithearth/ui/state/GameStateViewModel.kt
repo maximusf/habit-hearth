@@ -4,13 +4,13 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.project.habithearth.data.UserProgressRepository
+import com.project.habithearth.model.ResourceProgress
+import com.project.habithearth.model.TaskCategory
+import com.project.habithearth.model.canAfford
+import com.project.habithearth.model.withUnlockCostPaid
+import com.project.habithearth.ui.map.MainHubBuildingIds
 import com.project.habithearth.ui.map.unlockCost
 import com.project.habithearth.ui.map.villageBuildingById
-import com.project.habithearth.ui.map.canAfford
-import com.project.habithearth.ui.map.MainHubBuildingIds
-import com.project.habithearth.ui.map.withUnlockCostPaid
-import com.project.habithearth.ui.model.HabitTask
-import com.project.habithearth.ui.model.TaskCategory
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -24,7 +24,6 @@ data class GameUiState(
     val spiritGems: Int = 8,
     val coins: Int = 240,
     val xpProgress: Float = 0.62f,
-    val tasks: List<HabitTask> = defaultSeedTasks(),
     /** Map buildings the player has unlocked (starter hubs are merged in when loading a save). */
     val ownedBuildingIds: Set<String> = emptySet(),
 )
@@ -53,71 +52,20 @@ class GameStateViewModel(
         }
     }
 
-    fun addTask(
-        title: String,
-        note: String,
-        category: TaskCategory,
-        rewardAmount: Int = 1,
-        buildingId: String? = null,
-    ) {
-        val normalizedBuilding = buildingId?.trim()?.takeIf { it.isNotEmpty() }
-        _uiState.update { s ->
-            val task = HabitTask(
-                title = title.trim(),
-                note = note.trim(),
-                category = category,
-                rewardAmount = rewardAmount.coerceAtLeast(1),
-                buildingId = normalizedBuilding,
-            )
-            s.copy(tasks = s.tasks + task)
-        }
-        persist()
-    }
-
-    fun setTaskCompleted(taskId: String, completed: Boolean) {
-        _uiState.update { s ->
-            val task = s.tasks.find { it.id == taskId } ?: return@update s
-            if (task.isCompleted == completed) return@update s
-
-            val delta = if (completed) task.rewardAmount else -task.rewardAmount
-            val newTasks = s.tasks.map { t ->
-                if (t.id == taskId) t.copy(isCompleted = completed) else t
-            }
-            s.copy(tasks = newTasks).withResourceDelta(task.category, delta)
-        }
-        persist()
-    }
-
-    fun updateTask(
-        taskId: String,
-        title: String,
-        note: String,
-        category: TaskCategory,
-        buildingId: String?,
-    ) {
-        val normalizedBuilding = buildingId?.trim()?.takeIf { it.isNotEmpty() }
-        _uiState.update { s ->
-            val task = s.tasks.find { it.id == taskId } ?: return@update s
-            var next = s
-            if (task.isCompleted && task.category != category) {
-                next = next.withResourceDelta(task.category, -task.rewardAmount)
-                next = next.withResourceDelta(category, task.rewardAmount)
-            }
-            next.copy(
-                tasks = next.tasks.map { t ->
-                    if (t.id == taskId) {
-                        t.copy(
-                            title = title.trim(),
-                            note = note.trim(),
-                            category = category,
-                            buildingId = normalizedBuilding,
-                        )
-                    } else {
-                        t
-                    }
-                },
-            )
-        }
+    /**
+     * Applies a gem/coin delta for a task category without touching the task
+     * list. Phase 5 of the DataStore refactor (see PLAN.md): tasks now live in
+     * [com.project.habithearth.data.task.TaskRepository], but reward-pool
+     * bookkeeping stays here until `ProgressRepository` lands. Screens call
+     * this after [com.project.habithearth.ui.tasks.TaskListViewModel.setCompleted]
+     * reports a real flip, so we don't double-credit on no-op writes.
+     *
+     * Pass a positive [delta] when crediting a fresh completion, negative when
+     * un-completing or re-categorizing a completed task.
+     */
+    fun applyRewardDelta(category: TaskCategory, delta: Int) {
+        if (delta == 0) return
+        _uiState.update { it.withResourceDelta(category, delta) }
         persist()
     }
 
@@ -140,16 +88,52 @@ class GameStateViewModel(
         val current = _uiState.value
         if (building.id in current.ownedBuildingIds) return true
         val cost = building.unlockCost()
-        if (!current.canAfford(cost)) return false
+        if (!current.resources.canAfford(cost)) return false
         _uiState.update { s ->
             if (building.id in s.ownedBuildingIds) return@update s
-            if (!s.canAfford(cost)) return@update s
-            s.withUnlockCostPaid(cost).copy(ownedBuildingIds = s.ownedBuildingIds + building.id)
+            // Recheck affordability inside the atomic update: resource pools
+            // can shift between the read above and the write here (e.g. a
+            // concurrent task completion), and canAfford on a stale snapshot
+            // is not enough to guarantee non-negative balances.
+            if (!s.resources.canAfford(cost)) return@update s
+            val paid = s.resources.withUnlockCostPaid(cost)
+            s.copyResources(paid).copy(ownedBuildingIds = s.ownedBuildingIds + building.id)
         }
         persist()
         return true
     }
 }
+
+/**
+ * Bridge view of the player's wallet/XP/owned buildings as a [ResourceProgress].
+ *
+ * Phase 2 of the DataStore refactor moves unlock-cost math onto
+ * [ResourceProgress] so it no longer depends on the UI state class. Until
+ * Phase 4 collapses these duplicated fields, [GameUiState] continues to own
+ * the actual storage and exposes this read-only view for the math.
+ */
+val GameUiState.resources: ResourceProgress
+    get() = ResourceProgress(
+        strengthGems = strengthGems,
+        wisdomGems = wisdomGems,
+        vitalityGems = vitalityGems,
+        spiritGems = spiritGems,
+        coins = coins,
+        xpProgress = xpProgress,
+        ownedBuildingIds = ownedBuildingIds,
+    )
+
+/** Inverse of [resources]: write a [ResourceProgress] back into a [GameUiState]. */
+fun GameUiState.copyResources(rp: ResourceProgress): GameUiState =
+    copy(
+        strengthGems = rp.strengthGems,
+        wisdomGems = rp.wisdomGems,
+        vitalityGems = rp.vitalityGems,
+        spiritGems = rp.spiritGems,
+        coins = rp.coins,
+        xpProgress = rp.xpProgress,
+        ownedBuildingIds = rp.ownedBuildingIds,
+    )
 
 @Suppress("UNCHECKED_CAST")
 class GameStateViewModelFactory(
@@ -160,20 +144,3 @@ class GameStateViewModelFactory(
     }
 }
 
-private fun defaultSeedTasks(): List<HabitTask> = listOf(
-    HabitTask(
-        title = "Morning stretch — 5 min",
-        category = TaskCategory.VITALITY,
-        rewardAmount = 1,
-    ),
-    HabitTask(
-        title = "Drink a full glass of water",
-        category = TaskCategory.VITALITY,
-        rewardAmount = 1,
-    ),
-    HabitTask(
-        title = "Read one chapter",
-        category = TaskCategory.WISDOM,
-        rewardAmount = 2,
-    ),
-)

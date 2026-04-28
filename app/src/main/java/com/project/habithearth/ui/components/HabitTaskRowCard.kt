@@ -17,8 +17,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.project.habithearth.ui.model.HabitTask
-import com.project.habithearth.ui.model.TaskCategory
+import com.project.habithearth.model.HabitTask
+import com.project.habithearth.model.TaskCategory
+import com.project.habithearth.ui.theme.outlineColor
 
 @Composable
 fun HabitTaskRowCard(
