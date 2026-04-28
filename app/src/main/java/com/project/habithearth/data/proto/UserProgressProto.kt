@@ -49,6 +49,57 @@ data class SettingsProto(
     @ProtoNumber(7) val displayName: String = "",
 )
 
+/**
+ * One narrative beat in the player's story log. Append-only — segments are
+ * never edited or removed once written, so the on-disk order matches reading
+ * order.
+ *
+ * `isGenerated = true` means [text] came from Gemini; `false` means it came
+ * from the offline fallback in `res/values/strings.xml`. Both paths cache the
+ * resolved prose verbatim so the story stays stable across model upgrades and
+ * across online/offline transitions mid-playthrough.
+ *
+ * `anchorId` ties a segment to a plot point or choice id (e.g. "p2" or
+ * "p2.choice_a") so the renderer can reconstruct branches without re-running
+ * the generator.
+ */
+@Serializable
+data class StorySegmentProto(
+    @ProtoNumber(1) val anchorId: String = "",
+    @ProtoNumber(2) val isGenerated: Boolean = false,
+    @ProtoNumber(3) val text: String = "",
+)
+
+/**
+ * A locked-in choice at a plot point. Choices are not revisitable, so this
+ * row is written once per plot point and never updated.
+ */
+@Serializable
+data class StoryChoiceProto(
+    @ProtoNumber(1) val plotPointIndex: Int = 0,
+    @ProtoNumber(2) val choiceId: String = "",
+)
+
+/**
+ * Per-user story state. Restart-survival contract:
+ *   - same user re-opens app: identical text in identical order
+ *   - same user updates app or model version: identical text (cached, not regenerated)
+ *   - different user: may diverge via [frozenCategory] tone + live-stat choice gating
+ *
+ * [frozenCategory] snapshots the dominant TaskCategory at story start so tone
+ * stays coherent for the whole arc. Choice gating at each plot point still
+ * reads live stats off ProgressProto, so reactivity is preserved without
+ * destabilizing the narrative voice.
+ */
+@Serializable
+data class StoryProto(
+    @ProtoNumber(1) val segments: List<StorySegmentProto> = emptyList(),
+    @ProtoNumber(2) val choices: List<StoryChoiceProto> = emptyList(),
+    @ProtoNumber(3) val plotPointsReached: Int = 0,
+    @ProtoNumber(4) val isComplete: Boolean = false,
+    @ProtoNumber(5) val frozenCategory: String = "",
+)
+
 @Serializable
 data class ProgressProto(
     @ProtoNumber(1) val strengthGems: Int = 0,
@@ -69,6 +120,7 @@ data class UserProgressProto(
     @ProtoNumber(1) val settings: SettingsProto = SettingsProto(),
     @ProtoNumber(2) val progress: ProgressProto = ProgressProto(),
     @ProtoNumber(3) val tasks: List<TaskProto> = emptyList(),
+    @ProtoNumber(4) val story: StoryProto = StoryProto(),
 ) {
     companion object {
         /** Empty-default instance returned by the serializer on fresh install. */
