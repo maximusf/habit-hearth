@@ -14,12 +14,13 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 /**
- * Screen state holder for task lists (HomeScreen, BuildingDetailScreen).
- *
- * Phase 4 of the DataStore refactor (see PLAN.md): this ViewModel exists but
- * is not yet wired into screens - that is Phase 5. Until then, the legacy
- * [com.project.habithearth.ui.state.GameStateViewModel] still owns task
- * persistence so the app keeps working unchanged.
+ * Screen state holder for task lists (HomeScreen, BuildingDetailScreen,
+ * TaskMakerScreen). Wired into all task-consuming screens as of Phase 5
+ * (see PLAN.md): task persistence is owned by [TaskRepository] on the
+ * typed DataStore, not by the legacy
+ * [com.project.habithearth.ui.state.GameStateViewModel]. Reward-pool
+ * bookkeeping (gem/coin deltas on completion) still routes through the
+ * legacy VM until `ProgressRepository` lands in the second milestone.
  *
  * Hot vs cold flow notes:
  *   - [tasks] is hot ([SharingStarted.WhileSubscribed]) so multiple screens

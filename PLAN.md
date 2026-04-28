@@ -15,7 +15,7 @@ This plan is for formal review before implementation.
 ## Scope notes
 
 - **No real users yet.** Dev/testing only — no migration phase. Uninstall app before first proto build to clear stale Preferences DataStore.
-- **Authentication is out of scope.** App boots directly to Home. No login screen, no session lock, no account/password storage.
+- **Authentication removal is deferred to the second milestone.** Final target: app boots directly to Home, no login screen, no session lock, no account/password storage. The initial milestone (this PR) leaves the existing login/account gate in place so the persistence refactor can land without entangling auth changes; the gate is stripped in a follow-up alongside `ProgressRepository` / `SettingsRepository`.
 
 ## Verified Current State
 

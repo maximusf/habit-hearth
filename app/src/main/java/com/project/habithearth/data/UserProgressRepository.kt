@@ -107,36 +107,49 @@ class UserProgressRepository(
     suspend fun completeAccountSetup(username: String, password: String, displayName: String) {
         val salt = CredentialHasher.generateSalt()
         val hash = CredentialHasher.hash(password, salt)
-        // Wipe the typed proto store *before* committing the new account to
-        // prefs. If the proto write fails (e.g. IO error), prefs stay
-        // untouched and the caller sees the failure: the previous account is
-        // intact, no half-created state. Doing prefs first risked a torn
-        // state where a "new" account was marked complete in prefs while
-        // still inheriting the previous user's tasks/story from the proto.
+        // Snapshot the proto store before wiping it so a prefs-side failure
+        // can roll back. Without the snapshot, a partial failure (proto
+        // wiped, prefs throw) would erase the previous user's tasks/story
+        // while leaving them logged in - data loss with no torn flag to
+        // recover from. With the snapshot, we get all-or-nothing semantics
+        // for the migration window: either the new account lands
+        // completely, or both stores stay on the previous account's data.
+        val previousProto = protoDataStore.data.first()
         protoDataStore.updateData { UserProgressProto.DEFAULT }
-        dataStore.edit { prefs ->
-            prefs[KEY_ACCOUNT_COMPLETE] = true
-            prefs[KEY_DISPLAY_NAME] = displayName.trim().ifBlank { "Traveler" }
-            prefs[KEY_USERNAME] = username.trim()
-            prefs[KEY_PASSWORD_SALT] = salt
-            prefs[KEY_PASSWORD_HASH] = hash
-            prefs[KEY_SESSION_LOCKED] = false
+        try {
+            dataStore.edit { prefs ->
+                prefs[KEY_ACCOUNT_COMPLETE] = true
+                prefs[KEY_DISPLAY_NAME] = displayName.trim().ifBlank { "Traveler" }
+                prefs[KEY_USERNAME] = username.trim()
+                prefs[KEY_PASSWORD_SALT] = salt
+                prefs[KEY_PASSWORD_HASH] = hash
+                prefs[KEY_SESSION_LOCKED] = false
 
-            // Reset all in-game resources when a new account is created.
-            // Tasks now persist via TaskRepository; this only zeroes the
-            // gem/coin/progress pools that still live on GameUiState.
-            prefs[KEY_GAME_STATE_JSON] =
-                gson.toJson(
-                    GameUiState(
-                        strengthGems = 0,
-                        wisdomGems = 0,
-                        vitalityGems = 0,
-                        spiritGems = 0,
-                        coins = 0,
-                        xpProgress = 0f,
-                        ownedBuildingIds = MainHubBuildingIds,
-                    ),
-                )
+                // Reset all in-game resources when a new account is created.
+                // Tasks now persist via TaskRepository; this only zeroes the
+                // gem/coin/progress pools that still live on GameUiState.
+                prefs[KEY_GAME_STATE_JSON] =
+                    gson.toJson(
+                        GameUiState(
+                            strengthGems = 0,
+                            wisdomGems = 0,
+                            vitalityGems = 0,
+                            spiritGems = 0,
+                            coins = 0,
+                            xpProgress = 0f,
+                            ownedBuildingIds = MainHubBuildingIds,
+                        ),
+                    )
+            }
+        } catch (prefsError: Throwable) {
+            // Best-effort restore of the previous proto state. If this
+            // restore itself throws, the IO subsystem is in a bad enough
+            // shape that surfacing the original prefs error is still the
+            // right move; suppress-attach the restore failure so it isn't
+            // lost on diagnostic paths.
+            runCatching { protoDataStore.updateData { previousProto } }
+                .onFailure { prefsError.addSuppressed(it) }
+            throw prefsError
         }
     }
 
@@ -247,15 +260,22 @@ class UserProgressRepository(
     }
 
     /** Wipes all stored preferences (account, game, settings) **and** the typed proto store (tasks, story).
-     * Used when starting a new account from the sign-in screen. Proto store
-     * is wiped first: if it throws, prefs stay intact and the caller sees
-     * the failure with the old account still usable. The reverse order
-     * could leave the user "logged out" (prefs cleared) while their tasks
-     * and story persisted into the next account. */
+     * Used when starting a new account from the sign-in screen. Snapshots
+     * the proto store first so a prefs-side failure can roll the proto back
+     * to the previous user's data: that way "Create new account" is either
+     * fully applied or the original state is preserved, never a half-cleared
+     * mix where prefs reset but tasks/story leaked, or vice versa. */
     suspend fun clearAllLocalData() {
+        val previousProto = protoDataStore.data.first()
         protoDataStore.updateData { UserProgressProto.DEFAULT }
-        dataStore.edit { prefs ->
-            prefs.clear()
+        try {
+            dataStore.edit { prefs ->
+                prefs.clear()
+            }
+        } catch (prefsError: Throwable) {
+            runCatching { protoDataStore.updateData { previousProto } }
+                .onFailure { prefsError.addSuppressed(it) }
+            throw prefsError
         }
     }
 

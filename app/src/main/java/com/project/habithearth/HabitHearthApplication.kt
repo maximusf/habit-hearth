@@ -19,8 +19,10 @@ class HabitHearthApplication : Application() {
      * its delegate, but threading the same repository instance also avoids
      * duplicating the in-memory state flow per ViewModel.
      *
-     * Phase 4 wires this up but does not yet route screens through it; that
-     * happens in Phase 5.
+     * As of Phase 5, the task-consuming screens (HomeScreen,
+     * BuildingDetailScreen, TaskMakerScreen) all read this through
+     * [com.project.habithearth.ui.tasks.TaskListViewModel] /
+     * [com.project.habithearth.ui.tasks.TaskEditorViewModel].
      */
     lateinit var taskRepository: TaskRepository
         private set

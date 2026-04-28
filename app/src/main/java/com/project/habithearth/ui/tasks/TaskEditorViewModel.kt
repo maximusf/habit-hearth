@@ -62,6 +62,31 @@ class TaskEditorViewModel(
      */
     val isEditingTaskLoaded: StateFlow<Boolean> = _isEditingTaskLoaded.asStateFlow()
 
+    private val _isSaving = MutableStateFlow(false)
+
+    /**
+     * True while a [saveAsync] write is in flight. UI gates the Save button
+     * on this so a double-tap can't enqueue two `createTask` calls and
+     * produce duplicate rows.
+     */
+    val isSaving: StateFlow<Boolean> = _isSaving.asStateFlow()
+
+    private val _saveError = MutableStateFlow<String?>(null)
+
+    /**
+     * Last save failure message, or null if the last save succeeded (or no
+     * save has run yet). Set by [saveAsync] when the underlying DataStore
+     * write throws; cleared on the next save attempt. Surfacing this as
+     * state rather than letting `updateData` exceptions propagate keeps the
+     * editor screen alive on IO errors instead of crashing the app.
+     */
+    val saveError: StateFlow<String?> = _saveError.asStateFlow()
+
+    /** Clears the [saveError] message, e.g. after the UI has shown it. */
+    fun clearSaveError() {
+        _saveError.value = null
+    }
+
     /**
      * Stream of the task being edited, or `null` for new-task mode and after a
      * concurrent delete. Cold flow upgraded to a [StateFlow] so the screen can
@@ -107,7 +132,20 @@ class TaskEditorViewModel(
         }
     }
 
-    /** Fire-and-forget variant for callers that don't need the resulting id. */
+    /**
+     * Fire-and-forget variant for callers that don't need the resulting id.
+     *
+     * Re-entrancy guard: if a save is already in flight ([isSaving] true),
+     * the second call is dropped. Without this, a double-tap on the Save
+     * button could enqueue two `createTask` writes in new-task mode and
+     * produce duplicate rows.
+     *
+     * Errors from the underlying DataStore write are caught and surfaced
+     * via [saveError]. Letting them propagate would tear down the
+     * viewModelScope (or, in worst cases, crash the app) on a transient
+     * IO error - not acceptable for an editor screen the user is mid-flow
+     * on.
+     */
     fun saveAsync(
         title: String,
         note: String,
@@ -115,9 +153,18 @@ class TaskEditorViewModel(
         buildingId: String?,
         onSaved: (String) -> Unit = {},
     ) {
+        if (_isSaving.value) return
+        _isSaving.value = true
+        _saveError.value = null
         viewModelScope.launch {
-            val id = save(title, note, category, buildingId)
-            onSaved(id)
+            try {
+                val id = save(title, note, category, buildingId)
+                onSaved(id)
+            } catch (e: Throwable) {
+                _saveError.value = e.localizedMessage ?: e.javaClass.simpleName
+            } finally {
+                _isSaving.value = false
+            }
         }
     }
 }

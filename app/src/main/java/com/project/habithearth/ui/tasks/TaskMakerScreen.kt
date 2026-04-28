@@ -66,6 +66,8 @@ fun TaskMakerScreen(
 
     val game by gameStateViewModel.uiState.collectAsState()
     val existingTask by editorVm.editingTask.collectAsState()
+    val isSaving by editorVm.isSaving.collectAsState()
+    val saveError by editorVm.saveError.collectAsState()
     val isEditMode = editorVm.isEditMode
     val initialBuildingId = editorVm.initialBuildingId
 
@@ -313,10 +315,26 @@ fun TaskMakerScreen(
                         },
                     )
                 },
-                enabled = title.isNotBlank() && (!isEditMode || isEditingTaskLoaded),
+                enabled = title.isNotBlank() && !isSaving && (!isEditMode || isEditingTaskLoaded),
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text(if (isEditMode) "Save changes" else "Save habit")
+                Text(
+                    when {
+                        isSaving -> "Saving..."
+                        isEditMode -> "Save changes"
+                        else -> "Save habit"
+                    },
+                )
+            }
+            saveError?.let { errorMessage ->
+                // Inline failure surface so the editor screen survives a
+                // transient DataStore IO error instead of silently doing
+                // nothing. The user can retry from the same form.
+                Text(
+                    text = "Couldn't save: $errorMessage",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
             }
         }
     }
