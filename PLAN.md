@@ -15,7 +15,7 @@ This plan is for formal review before implementation.
 ## Scope notes
 
 - **No real users yet.** Dev/testing only — no migration phase. Uninstall app before first proto build to clear stale Preferences DataStore.
-- **Authentication removal is deferred to the second milestone.** Final target: app boots directly to Home, no login screen, no session lock, no account/password storage. The initial milestone (this PR) leaves the existing login/account gate in place so the persistence refactor can land without entangling auth changes; the gate is stripped in a follow-up alongside `ProgressRepository` / `SettingsRepository`.
+- **Authentication removal: DONE (post-Maximus merge, second milestone).** App now boots directly to Home. `ui/account/` and `data/CredentialHasher.kt` deleted; `data/UserProgressRepository.kt` slimmed of all credential / session / account-setup methods (legacy `KEY_GAME_STATE_JSON` blob still resident until `ProgressRepository` lands). `AccountSettings` reduced to display name + preferences + avatar only. `ProfileScreen` no longer renders username, password, change-password, or sign-out UI.
 
 ## Verified Current State
 
@@ -246,7 +246,7 @@ message ProgressProto {
   int32 vitality_gems = 3;
   int32 spirit_gems = 4;
   int32 coins = 5;
-  float xp_progress = 6;
+  int32 total_xp = 6;          // monotonic absolute total; level/in-level derived in code
   repeated string owned_building_ids = 7;
 }
 
@@ -486,6 +486,57 @@ Reason:
 - gives one clear place for tasks before broader settings/progress split
 
 Second milestone: `ProgressRepository` + `SettingsRepository` + remaining screens.
+
+### Second-milestone progress (post-Maximus)
+
+Done:
+
+- Auth fully removed (`ui/account/`, `CredentialHasher`, login/signup/logout/change-password UI, `AccountSettings.username` / `hasLoginCredentials` fields). App boots straight to Home.
+- `GameUiState` defaults zeroed; `ownedBuildingIds` defaults to `MainHubBuildingIds` so fresh installs unlock the starter hubs without needing a save.
+- `loadGameState` defensively re-seeds `MainHubBuildingIds` when a persisted save's `ownedBuildingIds` is null **or** empty (covers blobs that pre-date the default-fill).
+- XP/Leveling system landed (see [XP / Leveling Design](#xp--leveling-design)). `xp_progress: Float` in `ProgressProto` renamed to `total_xp: Int` (field 6) before any production write. Tasks now grant XP on completion through `applyRewardDelta`.
+- Hidden debug panel in Profile (debug-build-only, 7-tap unlock): mint gems/coins/XP, unlock all buildings, reset progress.
+
+Still pending:
+
+- `ProgressRepository` — split gem/coin/XP/owned-building math off the legacy Gson blob onto `ProgressProto`.
+- `SettingsRepository` — split profile/preferences off legacy Preferences DataStore onto `SettingsProto`.
+- Delete legacy `data/UserProgressRepository.kt` once both above repos drain it.
+- Move `TaskCategory.outlineColor` out of `model/` into `ui/theme/TaskCategoryColors.kt` (Phase 2 cleanup, deferred during initial milestone).
+- Story track: `StoryViewModel` rewrite, Chapter 1 prose in `strings.xml`, sprite assets, story-screen gate wiring against `canAdvanceTo`.
+
+## XP / Leveling Design
+
+Wired post-Maximus, second milestone. Lives in `ui/state/Leveling.kt`.
+
+### Storage shape
+
+- Single source of truth: `totalXp: Int` on `GameUiState` / `ResourceProgress` / `ProgressProto.total_xp` (field 6 — was `float xp_progress` in earlier draft, renamed before any production write so no migration).
+- Level + within-level progress are derived, never stored. Stored values would drift after debug pokes and partial migrations.
+
+### Constants
+
+- `XP_PER_LEVEL = 100` — flat curve.
+- `XP_PER_TASK = 10` — flat grant per completion.
+
+### Rules
+
+- `levelFor(totalXp) = totalXp / 100 + 1` (level numbering starts at 1, not 0, so a fresh user reads as "Lv 1").
+- `xpInLevel(totalXp) = totalXp % 100`.
+- Completing a task → `totalXp += XP_PER_TASK`.
+- Uncompleting a task → gems refund, **XP does not refund**. Monotonic by design: prevents story-gate yo-yo and matches the "reading the chapter is permanent" feel. This is the one asymmetry between gem and XP bookkeeping.
+
+### Story gates
+
+- Chapter 1 has 5 plot segments (indices 0..4).
+- `requiredLevelForSegment(i) = i + 1`. Segment 0 ungated; segment N requires Lv N+1.
+- `canAdvanceTo(segmentIndex, totalXp)` returns the gate result. Story-screen wiring lands with the rest of the second-milestone story work; helpers are in place now so the resource model and the future story code agree on constants.
+
+### UI surfaces
+
+- Top resource bar: `Lv N · X/100`. Bar fill = `xpInLevel / XP_PER_LEVEL`.
+- Profile stats column: "Level" row showing `Lv N (X XP)`.
+- Debug panel XP row: shares the step chips (1/10/100); label embeds live state for visibility.
 
 ## Story Persistence Design
 
