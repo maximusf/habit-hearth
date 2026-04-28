@@ -34,7 +34,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.project.habithearth.data.UserProgressRepository
 import com.project.habithearth.ui.map.defaultVillageBuildings
-import com.project.habithearth.ui.model.TaskCategory
+import com.project.habithearth.model.TaskCategory
 import com.project.habithearth.ui.state.GameStateViewModel
 import com.project.habithearth.ui.theme.HearthPanelWarm
 

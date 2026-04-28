@@ -4,13 +4,14 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.project.habithearth.data.UserProgressRepository
+import com.project.habithearth.model.HabitTask
+import com.project.habithearth.model.ResourceProgress
+import com.project.habithearth.model.TaskCategory
+import com.project.habithearth.model.canAfford
+import com.project.habithearth.model.withUnlockCostPaid
+import com.project.habithearth.ui.map.MainHubBuildingIds
 import com.project.habithearth.ui.map.unlockCost
 import com.project.habithearth.ui.map.villageBuildingById
-import com.project.habithearth.ui.map.canAfford
-import com.project.habithearth.ui.map.MainHubBuildingIds
-import com.project.habithearth.ui.map.withUnlockCostPaid
-import com.project.habithearth.ui.model.HabitTask
-import com.project.habithearth.ui.model.TaskCategory
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -140,16 +141,52 @@ class GameStateViewModel(
         val current = _uiState.value
         if (building.id in current.ownedBuildingIds) return true
         val cost = building.unlockCost()
-        if (!current.canAfford(cost)) return false
+        if (!current.resources.canAfford(cost)) return false
         _uiState.update { s ->
             if (building.id in s.ownedBuildingIds) return@update s
-            if (!s.canAfford(cost)) return@update s
-            s.withUnlockCostPaid(cost).copy(ownedBuildingIds = s.ownedBuildingIds + building.id)
+            // Recheck affordability inside the atomic update: resource pools
+            // can shift between the read above and the write here (e.g. a
+            // concurrent task completion), and canAfford on a stale snapshot
+            // is not enough to guarantee non-negative balances.
+            if (!s.resources.canAfford(cost)) return@update s
+            val paid = s.resources.withUnlockCostPaid(cost)
+            s.copyResources(paid).copy(ownedBuildingIds = s.ownedBuildingIds + building.id)
         }
         persist()
         return true
     }
 }
+
+/**
+ * Bridge view of the player's wallet/XP/owned buildings as a [ResourceProgress].
+ *
+ * Phase 2 of the DataStore refactor moves unlock-cost math onto
+ * [ResourceProgress] so it no longer depends on the UI state class. Until
+ * Phase 4 collapses these duplicated fields, [GameUiState] continues to own
+ * the actual storage and exposes this read-only view for the math.
+ */
+val GameUiState.resources: ResourceProgress
+    get() = ResourceProgress(
+        strengthGems = strengthGems,
+        wisdomGems = wisdomGems,
+        vitalityGems = vitalityGems,
+        spiritGems = spiritGems,
+        coins = coins,
+        xpProgress = xpProgress,
+        ownedBuildingIds = ownedBuildingIds,
+    )
+
+/** Inverse of [resources]: write a [ResourceProgress] back into a [GameUiState]. */
+fun GameUiState.copyResources(rp: ResourceProgress): GameUiState =
+    copy(
+        strengthGems = rp.strengthGems,
+        wisdomGems = rp.wisdomGems,
+        vitalityGems = rp.vitalityGems,
+        spiritGems = rp.spiritGems,
+        coins = rp.coins,
+        xpProgress = rp.xpProgress,
+        ownedBuildingIds = rp.ownedBuildingIds,
+    )
 
 @Suppress("UNCHECKED_CAST")
 class GameStateViewModelFactory(

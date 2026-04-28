@@ -47,8 +47,10 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.project.habithearth.model.canAfford
 import com.project.habithearth.ui.components.LockScreenOrientation
 import com.project.habithearth.ui.state.GameUiState
+import com.project.habithearth.ui.state.resources
 import com.project.habithearth.ui.theme.HabitHearthTheme
 import com.project.habithearth.ui.theme.HearthBackground
 
@@ -103,7 +105,7 @@ fun MapScreen(
 
     pendingUnlock?.let { building ->
         val cost = building.unlockCost()
-        val canAfford = gameUiState.canAfford(cost)
+        val canAfford = gameUiState.resources.canAfford(cost)
         AlertDialog(
             onDismissRequest = { pendingUnlock = null },
             title = { Text(building.name) },

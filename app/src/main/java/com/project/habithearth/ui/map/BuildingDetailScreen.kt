@@ -43,10 +43,12 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.project.habithearth.data.UserProgressRepository
+import com.project.habithearth.model.canAfford
 import com.project.habithearth.ui.components.HabitTaskRowCard
 import com.project.habithearth.ui.components.VerticalScrollIndicator
 import com.project.habithearth.ui.state.GameStateViewModel
 import com.project.habithearth.ui.state.GameStateViewModelFactory
+import com.project.habithearth.ui.state.resources
 import com.project.habithearth.ui.theme.HabitHearthTheme
 import com.project.habithearth.ui.theme.HearthPanelWarm
 
@@ -148,7 +150,7 @@ fun BuildingDetailScreen(
 
             if (!owned) {
                 val cost = building.unlockCost()
-                val canAfford = game.canAfford(cost)
+                val canAfford = game.resources.canAfford(cost)
                 Text(
                     text = "This building is locked. Purchase it for ${cost.displayLabel()} to open the full story and habits here.",
                     style = MaterialTheme.typography.bodyLarge,

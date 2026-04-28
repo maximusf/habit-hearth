@@ -17,6 +17,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.project.habithearth.ui.map.defaultVillageBuildings
+import com.project.habithearth.ui.theme.outlineColor
 
 @Composable
 fun BuildingDirectoryDialog(

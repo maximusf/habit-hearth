@@ -1,6 +1,6 @@
 package com.project.habithearth.ui.map
 
-import com.project.habithearth.ui.model.TaskCategory
+import com.project.habithearth.model.TaskCategory
 
 data class VillageBuilding(
     val id: String,
