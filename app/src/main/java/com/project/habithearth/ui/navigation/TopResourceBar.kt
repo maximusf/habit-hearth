@@ -9,11 +9,14 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.Icon
@@ -37,6 +40,7 @@ import androidx.compose.ui.semantics.invisibleToUser
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -46,7 +50,9 @@ private const val GemVitalityAssetPath = "images/gem_vitality.png"
 private const val GemSpiritAssetPath = "images/gem_spirit.png"
 private const val CoinAssetPath = "images/Coin.png"
 private const val GemAssetMaxEdgePx = 128
-private const val CoinAssetMaxEdgePx = 192
+private const val CoinAssetMaxEdgePx = 256
+
+private val GemStatSize = 34.dp
 
 @Composable
 fun TopResourceBar(
@@ -57,108 +63,52 @@ fun TopResourceBar(
     coins: Int = 0,
     totalXp: Int = 0,
     modifier: Modifier = Modifier,
+    navigationIcon: @Composable (() -> Unit)? = null, // New parameter for the hamburger
 ) {
-    val isLandscape =
-        LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+    val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
 
     Surface(
         tonalElevation = 3.dp,
         color = MaterialTheme.colorScheme.surfaceContainer,
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .windowInsetsPadding(WindowInsets.displayCutout)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 10.dp),
+                .padding(start = 4.dp, end = 12.dp, top = 6.dp, bottom = 6.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            if (isLandscape) {
-                // Landscape: single row — gems + coins side by side
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    GemStat(
-                        amount = strengthGems,
-                        assetPath = GemStrengthAssetPath,
-                        accessibilityLabel = "Strength gems",
-                    )
-                    GemStat(
-                        amount = wisdomGems,
-                        assetPath = GemWisdomAssetPath,
-                        accessibilityLabel = "Wisdom gems",
-                    )
-                    GemStat(
-                        amount = vitalityGems,
-                        assetPath = GemVitalityAssetPath,
-                        accessibilityLabel = "Vitality gems",
-                    )
-                    GemStat(
-                        amount = spiritGems,
-                        assetPath = GemSpiritAssetPath,
-                        accessibilityLabel = "Spirit gems",
-                    )
-                    GemStat(
-                        amount = coins,
-                        assetPath = CoinAssetPath,
-                        accessibilityLabel = "Coins",
-                        boxModifier = Modifier.size(
-                            width = GemStatSize * 2,
-                            height = GemStatSize,
-                        ),
-                        decodeMaxEdgePx = CoinAssetMaxEdgePx,
-                    )
+            // Left Side: Menu + Resources
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (navigationIcon != null) {
+                    navigationIcon()
                 }
-            } else {
-                // Portrait: gems on top row, coins on a second row below
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
+
+                if (isLandscape) {
                     Row(
+                        modifier = Modifier.padding(start = 4.dp),
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        GemStat(
-                            amount = strengthGems,
-                            assetPath = GemStrengthAssetPath,
-                            accessibilityLabel = "Strength gems",
-                        )
-                        GemStat(
-                            amount = wisdomGems,
-                            assetPath = GemWisdomAssetPath,
-                            accessibilityLabel = "Wisdom gems",
-                        )
-                        GemStat(
-                            amount = vitalityGems,
-                            assetPath = GemVitalityAssetPath,
-                            accessibilityLabel = "Vitality gems",
-                        )
-                        GemStat(
-                            amount = spiritGems,
-                            assetPath = GemSpiritAssetPath,
-                            accessibilityLabel = "Spirit gems",
-                        )
+                        ResourceGroup(strengthGems, wisdomGems, vitalityGems, spiritGems, coins)
                     }
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
+                } else {
+                    Column(
+                        modifier = Modifier.padding(start = 4.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        GemStat(
-                            amount = coins,
-                            assetPath = CoinAssetPath,
-                            accessibilityLabel = "Coins",
-                            boxModifier = Modifier.size(
-                                width = GemStatSize * 2,
-                                height = GemStatSize,
-                            ),
-                            decodeMaxEdgePx = CoinAssetMaxEdgePx,
-                        )
+                        ResourceGroup(strengthGems, wisdomGems, vitalityGems, spiritGems, coins)
                     }
                 }
             }
 
+            // Right Side: Level and XP
             Column(
-                verticalArrangement = Arrangement.spacedBy(4.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+                horizontalAlignment = Alignment.End
             ) {
                 val level = com.project.habithearth.ui.state.levelFor(totalXp)
                 val inLevel = com.project.habithearth.ui.state.xpInLevel(totalXp)
@@ -170,21 +120,40 @@ fun TopResourceBar(
                 )
                 LinearProgressIndicator(
                     progress = { inLevel.toFloat() / perLevel.toFloat() },
-                    modifier = Modifier.width(120.dp),
+                    modifier = Modifier.width(100.dp),
                 )
             }
         }
     }
 }
 
-private val GemStatSize = 34.dp
-
-/** Show 0–999 as-is; from 1000 onward use [thousands]k+ (e.g. 1000 -> 1k+). */
-private fun formatResourceAmountForGem(amount: Int): String {
-    val n = amount.coerceAtLeast(0)
-    if (n <= 999) return n.toString()
-    val k = n / 1000
-    return "${k}k+"
+@Composable
+private fun ResourceGroup(
+    strength: Int,
+    wisdom: Int,
+    vitality: Int,
+    spirit: Int,
+    coins: Int
+) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        GemStat(amount = strength, assetPath = GemStrengthAssetPath, accessibilityLabel = "Strength")
+        GemStat(amount = wisdom, assetPath = GemWisdomAssetPath, accessibilityLabel = "Wisdom")
+        GemStat(amount = vitality, assetPath = GemVitalityAssetPath, accessibilityLabel = "Vitality")
+        GemStat(amount = spirit, assetPath = GemSpiritAssetPath, accessibilityLabel = "Spirit")
+        GemStat(
+            amount = coins,
+            assetPath = CoinAssetPath,
+            accessibilityLabel = "Coins",
+            boxModifier = Modifier.size(width = 70.dp, height = 70.dp),
+            decodeMaxEdgePx = CoinAssetMaxEdgePx,
+            baseFontSize = 18f,
+            textOffset = 2.dp,
+            isCoin = true
+        )
+    }
 }
 
 @Composable
@@ -194,23 +163,22 @@ private fun GemStat(
     accessibilityLabel: String,
     boxModifier: Modifier = Modifier.size(GemStatSize),
     decodeMaxEdgePx: Int = GemAssetMaxEdgePx,
+    baseFontSize: Float = 13f,
+    textOffset: Dp = 0.dp,
+    isCoin: Boolean = false
 ) {
     val context = LocalContext.current
     val bitmap = remember(assetPath, decodeMaxEdgePx) {
         decodeGemAssetBitmap(context, assetPath, decodeMaxEdgePx)
     }
     val displayAmount = formatResourceAmountForGem(amount)
+
     val fontSize = when (displayAmount.length) {
-        1, 2 -> 13.sp
-        3 -> 10.5.sp
-        else -> 8.5.sp
+        1, 2 -> baseFontSize.sp
+        3 -> (baseFontSize * 0.85).sp
+        else -> (baseFontSize * 0.7).sp
     }
-    val amountStyle = MaterialTheme.typography.labelMedium.copy(
-        fontWeight = FontWeight.Bold,
-        fontSize = fontSize,
-        lineHeight = fontSize,
-        textAlign = TextAlign.Center,
-    )
+
     Box(
         modifier = boxModifier.semantics(mergeDescendants = true) {
             contentDescription = "$accessibilityLabel, $amount"
@@ -222,26 +190,34 @@ private fun GemStat(
                 bitmap = bitmap,
                 contentDescription = null,
                 modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Fit,
+                contentScale = if (isCoin) ContentScale.FillBounds else ContentScale.Fit,
             )
         }
         Text(
             text = displayAmount,
-            style = amountStyle,
+            style = MaterialTheme.typography.labelMedium.copy(
+                fontWeight = FontWeight.ExtraBold,
+                fontSize = fontSize,
+                textAlign = TextAlign.Center,
+            ),
             color = Color.White,
             maxLines = 1,
             modifier = Modifier
                 .padding(horizontal = 2.dp)
+                .padding(start = if (isCoin) 14.dp else 0.dp)
+                .padding(bottom = textOffset)
                 .semantics { invisibleToUser() },
         )
     }
 }
 
-private fun decodeGemAssetBitmap(
-    context: Context,
-    assetPath: String,
-    maxEdgePx: Int,
-): ImageBitmap? {
+private fun formatResourceAmountForGem(amount: Int): String {
+    val n = amount.coerceAtLeast(0)
+    if (n <= 999) return n.toString()
+    return "${n / 1000}k+"
+}
+
+private fun decodeGemAssetBitmap(context: Context, assetPath: String, maxEdgePx: Int): ImageBitmap? {
     return runCatching {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         context.assets.open(assetPath).use { BitmapFactory.decodeStream(it, null, bounds) }
@@ -251,7 +227,6 @@ private fun decodeGemAssetBitmap(
         val decode = BitmapFactory.Options().apply {
             inSampleSize = sample
             inPreferredConfig = Bitmap.Config.RGB_565
-            inScaled = false
         }
         context.assets.open(assetPath).use { stream ->
             BitmapFactory.decodeStream(stream, null, decode)?.asImageBitmap()
@@ -261,16 +236,13 @@ private fun decodeGemAssetBitmap(
 
 private fun sampleSizeForMaxEdge(width: Int, height: Int, maxEdgePx: Int): Int {
     val longest = maxOf(width, height)
-    if (longest <= maxEdgePx) return 1
     var sample = 1
-    while (longest / sample > maxEdgePx) {
-        sample *= 2
-    }
+    while (longest / sample > maxEdgePx) sample *= 2
     return sample
 }
 
 /**
- * Resource bar with a menu strip directly below it; hamburger is top-start aligned.
+ * Modernized Chrome: Hamburger menu is now inline with the resource stats.
  */
 @Composable
 fun TopChromeWithMenu(
@@ -283,33 +255,22 @@ fun TopChromeWithMenu(
     coins: Int = 0,
     totalXp: Int = 0,
 ) {
-    Column(modifier = modifier.fillMaxWidth()) {
-        TopResourceBar(
-            strengthGems = strengthGems,
-            wisdomGems = wisdomGems,
-            vitalityGems = vitalityGems,
-            spiritGems = spiritGems,
-            coins = coins,
-            totalXp = totalXp,
-        )
-        Surface(
-            tonalElevation = 2.dp,
-            color = MaterialTheme.colorScheme.surfaceContainer,
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = 4.dp, end = 8.dp, top = 2.dp, bottom = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                IconButton(onClick = onMenuClick) {
-                    Icon(
-                        imageVector = Icons.Filled.Menu,
-                        contentDescription = "Open menu",
-                    )
-                }
+    TopResourceBar(
+        modifier = modifier,
+        strengthGems = strengthGems,
+        wisdomGems = wisdomGems,
+        vitalityGems = vitalityGems,
+        spiritGems = spiritGems,
+        coins = coins,
+        totalXp = totalXp,
+        navigationIcon = {
+            IconButton(onClick = onMenuClick) {
+                Icon(
+                    imageVector = Icons.Filled.Menu,
+                    contentDescription = "Open menu",
+                    tint = MaterialTheme.colorScheme.onSurface
+                )
             }
         }
-    }
+    )
 }
