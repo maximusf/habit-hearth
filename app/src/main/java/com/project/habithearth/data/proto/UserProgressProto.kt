@@ -28,6 +28,12 @@ import kotlinx.serialization.protobuf.ProtoNumber
  * the kotlinx.serialization fallback, which produces the same wire format.
  */
 @Serializable
+data class CollectionLogEntryProto(
+    @ProtoNumber(1) val timestampEpochMs: Long = 0L,
+    @ProtoNumber(2) val amount: Int = 0,
+)
+
+@Serializable
 data class TaskProto(
     @ProtoNumber(1) val id: String = "",
     @ProtoNumber(2) val title: String = "",
@@ -36,6 +42,10 @@ data class TaskProto(
     @ProtoNumber(5) val rewardAmount: Int = 0,
     @ProtoNumber(6) val isCompleted: Boolean = false,
     @ProtoNumber(7) val buildingId: String = "",
+    @ProtoNumber(8) val completionCount: Int = 0,
+    @ProtoNumber(9) val streakMultiplier: Int = 1,
+    @ProtoNumber(10) val collectedCurrency: Int = 0,
+    @ProtoNumber(11) val collectionLog: List<CollectionLogEntryProto> = emptyList(),
 )
 
 @Serializable

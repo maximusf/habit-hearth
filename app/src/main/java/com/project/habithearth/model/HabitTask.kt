@@ -20,4 +20,9 @@ data class HabitTask(
      * or null / blank for **Home** (unfiled).
      */
     val buildingId: String? = null,
+    val completionCount: Int = 0,
+    /** Multiplier applied to [rewardAmount] on each completion; grows with consecutive-day streaks. */
+    val streakMultiplier: Int = 1,
+    val collectedCurrency: Int = 0,
+    val collectionLog: List<CollectionLogEntry> = emptyList(),
 )

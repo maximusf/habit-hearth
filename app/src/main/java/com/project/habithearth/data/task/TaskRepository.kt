@@ -1,12 +1,15 @@
 package com.project.habithearth.data.task
 
 import androidx.datastore.core.DataStore
+import com.project.habithearth.data.proto.CollectionLogEntryProto
+import com.project.habithearth.data.proto.TaskProto
 import com.project.habithearth.data.proto.UserProgressProto
 import com.project.habithearth.model.HabitTask
 import com.project.habithearth.model.TaskCategory
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
+import java.util.concurrent.TimeUnit
 
 /**
  * Single owner of habit-task persistence on top of `DataStore<UserProgressProto>`.
@@ -89,10 +92,6 @@ class TaskRepository(
      * longer exists - silently dropping the edit is preferable to throwing,
      * because a delete-from-elsewhere racing with the editor would otherwise
      * crash on save.
-     *
-     * `isCompleted` and `rewardAmount` are intentionally not editable here:
-     * completion goes through [setTaskCompleted] so the (future) reward delta
-     * lives next to the toggle, and reward amount isn't user-tunable yet.
      */
     suspend fun updateTask(
         taskId: String,
@@ -100,6 +99,7 @@ class TaskRepository(
         note: String,
         category: TaskCategory,
         buildingId: String?,
+        rewardAmount: Int? = null,
     ) {
         val normalizedTitle = title.trim()
         val normalizedNote = note.trim()
@@ -113,11 +113,13 @@ class TaskRepository(
             var anyChanged = false
             val newTasks = current.tasks.map { proto ->
                 if (proto.id == taskId) {
+                    val newReward = rewardAmount?.coerceAtLeast(1) ?: proto.rewardAmount
                     val taskChanged =
                         proto.title != normalizedTitle ||
                             proto.note != normalizedNote ||
                             proto.category != normalizedCategory ||
-                            proto.buildingId != normalizedBuilding
+                            proto.buildingId != normalizedBuilding ||
+                            proto.rewardAmount != newReward
                     if (taskChanged) {
                         anyChanged = true
                         proto.copy(
@@ -125,6 +127,7 @@ class TaskRepository(
                             note = normalizedNote,
                             category = normalizedCategory,
                             buildingId = normalizedBuilding,
+                            rewardAmount = newReward,
                         )
                     } else {
                         proto
@@ -165,5 +168,47 @@ class TaskRepository(
             }
         }
         return localChanged
+    }
+
+    /**
+     * Records a completion event for [taskId]: appends a [CollectionLogEntryProto],
+     * updates the streak multiplier (mirrors [FullTaskClass.checkStreak] logic),
+     * and increments [TaskProto.completionCount] and [TaskProto.collectedCurrency].
+     *
+     * Returns the actual amount credited (rewardAmount × streakMultiplier) so
+     * callers can route the delta to [com.project.habithearth.ui.state.GameStateViewModel].
+     *
+     * Safe to call after [setTaskCompleted] returns true for a completion
+     * transition; no-op if the task no longer exists.
+     */
+    suspend fun collectCurrency(taskId: String): Int {
+        var amountCredited = 0
+        dataStore.updateData { current ->
+            val proto = current.tasks.firstOrNull { it.id == taskId }
+                ?: return@updateData current
+            val nowMs = System.currentTimeMillis()
+            val newMultiplier = computeNewMultiplier(proto, nowMs)
+            val credited = proto.rewardAmount * newMultiplier
+            amountCredited = credited
+            val entry = CollectionLogEntryProto(timestampEpochMs = nowMs, amount = credited)
+            val updated = proto.copy(
+                completionCount = proto.completionCount + 1,
+                streakMultiplier = newMultiplier,
+                collectedCurrency = proto.collectedCurrency + credited,
+                collectionLog = proto.collectionLog + entry,
+            )
+            current.copy(tasks = current.tasks.map { if (it.id == taskId) updated else it })
+        }
+        return amountCredited
+    }
+
+    private fun computeNewMultiplier(proto: TaskProto, nowMs: Long): Int {
+        // No streak adjustment until at least two completions are in the log
+        // (mirrors FullTaskClass.checkStreak: "if size < 2 return").
+        if (proto.collectionLog.size < 2) return proto.streakMultiplier
+        val lastMs = proto.collectionLog.last().timestampEpochMs
+        val daysBetween = TimeUnit.MILLISECONDS.toDays(nowMs - lastMs)
+        return if (daysBetween <= 1) proto.streakMultiplier + 1
+        else maxOf(1, proto.streakMultiplier - 1)
     }
 }

@@ -106,12 +106,16 @@ class TaskEditorViewModel(
      * Persists the form. Returns the resulting task id for navigation back.
      * Edit-mode no-ops (returns the same id) when the underlying task no
      * longer exists - matches [TaskRepository.updateTask] semantics.
+     *
+     * [rewardAmount] maps 1:1 from the difficulty selection (1–5) and is
+     * the base per-completion reward before streak multiplier is applied.
      */
     suspend fun save(
         title: String,
         note: String,
         category: TaskCategory,
         buildingId: String?,
+        rewardAmount: Int = 1,
     ): String {
         return if (taskId != null) {
             repo.updateTask(
@@ -120,6 +124,7 @@ class TaskEditorViewModel(
                 note = note,
                 category = category,
                 buildingId = buildingId,
+                rewardAmount = rewardAmount,
             )
             taskId
         } else {
@@ -127,6 +132,7 @@ class TaskEditorViewModel(
                 title = title,
                 note = note,
                 category = category,
+                rewardAmount = rewardAmount,
                 buildingId = buildingId,
             )
             created.id
@@ -152,6 +158,7 @@ class TaskEditorViewModel(
         note: String,
         category: TaskCategory,
         buildingId: String?,
+        rewardAmount: Int = 1,
         onSaved: (String) -> Unit = {},
     ) {
         if (_isSaving.value) return
@@ -159,7 +166,7 @@ class TaskEditorViewModel(
         _saveError.value = null
         viewModelScope.launch {
             try {
-                val id = save(title, note, category, buildingId)
+                val id = save(title, note, category, buildingId, rewardAmount)
                 onSaved(id)
             } catch (e: CancellationException) {
                 // Cancellation flows through structured concurrency (e.g.

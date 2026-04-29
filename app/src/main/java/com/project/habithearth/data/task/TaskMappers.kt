@@ -1,8 +1,12 @@
 package com.project.habithearth.data.task
 
+import com.project.habithearth.data.proto.CollectionLogEntryProto
 import com.project.habithearth.data.proto.TaskProto
+import com.project.habithearth.model.CollectionLogEntry
 import com.project.habithearth.model.HabitTask
 import com.project.habithearth.model.TaskCategory
+import com.project.habithearth.model.toEpochMs
+import com.project.habithearth.model.toLocalDateTime
 
 /**
  * Conversion between the wire-format [TaskProto] and the domain [HabitTask].
@@ -32,6 +36,10 @@ internal fun TaskProto.toDomain(): HabitTask =
         rewardAmount = rewardAmount.coerceAtLeast(1),
         isCompleted = isCompleted,
         buildingId = buildingId.takeIf { it.isNotBlank() },
+        completionCount = completionCount,
+        streakMultiplier = streakMultiplier.coerceAtLeast(1),
+        collectedCurrency = collectedCurrency,
+        collectionLog = collectionLog.map { it.toDomain() },
     )
 
 internal fun HabitTask.toProto(): TaskProto =
@@ -43,4 +51,20 @@ internal fun HabitTask.toProto(): TaskProto =
         rewardAmount = rewardAmount,
         isCompleted = isCompleted,
         buildingId = buildingId.orEmpty(),
+        completionCount = completionCount,
+        streakMultiplier = streakMultiplier,
+        collectedCurrency = collectedCurrency,
+        collectionLog = collectionLog.map { it.toProto() },
+    )
+
+internal fun CollectionLogEntryProto.toDomain(): CollectionLogEntry =
+    CollectionLogEntry(
+        timestamp = timestampEpochMs.toLocalDateTime(),
+        amount = amount,
+    )
+
+internal fun CollectionLogEntry.toProto(): CollectionLogEntryProto =
+    CollectionLogEntryProto(
+        timestampEpochMs = timestamp.toEpochMs(),
+        amount = amount,
     )

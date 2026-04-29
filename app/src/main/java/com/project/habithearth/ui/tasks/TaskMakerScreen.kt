@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
@@ -40,17 +41,18 @@ import com.project.habithearth.ui.theme.HearthPanelWarm
 /**
  * Habit create/edit screen.
  *
- * Phase 5 of the DataStore refactor (see PLAN.md): persistence moved off
- * [GameStateViewModel] onto [TaskEditorViewModel] (DataStore-backed). Route
- * args (`taskId`, `buildingId`) are picked up by the editor VM via its
- * SavedStateHandle, so this composable no longer takes them as parameters.
+ * The title is now composed via [BuildSentenceCard] (sentence builder) rather
+ * than a plain text field. [DifficultyCard] replaces the old implicit
+ * rewardAmount=1 default — the selected difficulty (1–5) maps directly to
+ * [HabitTask.rewardAmount] and acts as the base per-completion reward before
+ * the streak multiplier is applied.
  *
- * [gameStateViewModel] is still read for two pieces of progress data that
- * have not yet been split out (deferred to the second milestone):
+ * Note, category, and building dropdowns are preserved unchanged: category
+ * routes gems to the correct pool; building places the habit in the village map.
+ *
+ * [gameStateViewModel] is still read for:
  *   - `ownedBuildingIds` to filter the building dropdown.
- *   - reward-pool bookkeeping when a *completed* task's category changes
- *     (see the save handler). [TaskEditorViewModel.save] does not touch
- *     gems/coins, so the delta is applied here against the legacy VM.
+ *   - reward-pool rebalance when a completed task's category changes.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -63,6 +65,7 @@ fun TaskMakerScreen(
     val editorVm: TaskEditorViewModel = viewModel(
         factory = TaskEditorViewModelFactory(app.taskRepository),
     )
+    val sentenceVm: TaskSentenceViewModel = viewModel()
 
     val game by gameStateViewModel.uiState.collectAsState()
     val existingTask by editorVm.editingTask.collectAsState()
@@ -71,15 +74,12 @@ fun TaskMakerScreen(
     val isEditMode = editorVm.isEditMode
     val initialBuildingId = editorVm.initialBuildingId
 
-    var title by remember { mutableStateOf("") }
     var note by remember { mutableStateOf("") }
     var categoryExpanded by remember { mutableStateOf(false) }
     var selectedCategory by remember { mutableStateOf(TaskCategory.UNSORTED) }
     var buildingExpanded by remember { mutableStateOf(false) }
     var selectedBuildingId by remember { mutableStateOf<String?>(null) }
-    // Track whether the form has been seeded from the persisted task at least
-    // once. Without this, an in-flight DataStore re-emission (e.g. a save
-    // round-trip) would clobber whatever the user just typed.
+    // Prevents a late DataStore emission from clobbering text the user has typed.
     var seeded by remember { mutableStateOf(false) }
 
     val villageBuildings = remember { defaultVillageBuildings() }
@@ -87,10 +87,6 @@ fun TaskMakerScreen(
         villageBuildings.filter { it.id in game.ownedBuildingIds }
     }
     val buildingsForDropdown = remember(ownedBuildings, existingTask?.buildingId) {
-        // If the task is filed in a building the player no longer owns
-        // (shouldn't happen today, but cheap to guard), keep that orphan in
-        // the list so the user sees the current value rather than a silent
-        // reset to Home.
         val orphanId = existingTask?.buildingId
         val orphan = orphanId?.let { id -> villageBuildings.find { it.id == id } }
         if (orphan != null && orphan.id !in game.ownedBuildingIds) {
@@ -100,35 +96,28 @@ fun TaskMakerScreen(
         }
     }
 
-    // The editor VM publishes a separate "loaded" signal so we can tell apart
-    // "first emission with a real task", "task vanished mid-edit", and the
-    // initial null before the StateFlow has flushed its first value. Without
-    // this, edit mode keyed off an invalid taskId would keep `seeded = false`
-    // forever and the deleted-task fallback below would never fire.
     val isEditingTaskLoaded by editorVm.isEditingTaskLoaded.collectAsState()
 
-    // In edit mode, observeTask emits null if the task was deleted out from
-    // under us (or the route arg pointed at an invalid id to begin with);
-    // either way, bail back so the editor doesn't sit on stale or empty state.
+    // Navigate back if the task was deleted while the editor was open.
     LaunchedEffect(isEditMode, isEditingTaskLoaded, existingTask) {
         if (isEditMode && isEditingTaskLoaded && existingTask == null) {
             onBack()
         }
     }
 
+    // Seed all form fields from the persisted task on first emission (edit mode)
+    // or from route args (new-task mode).
     LaunchedEffect(existingTask, isEditMode, isEditingTaskLoaded) {
         if (!seeded) {
             val task = existingTask
             if (isEditMode) {
                 if (task != null) {
-                    title = task.title
                     note = task.note
                     selectedCategory = task.category
                     selectedBuildingId = task.buildingId
+                    sentenceVm.seedFromTask(task)
                     seeded = true
                 }
-                // If isEditingTaskLoaded is true but task is null, the
-                // LaunchedEffect above will navigate back; nothing to seed.
             } else {
                 selectedBuildingId =
                     initialBuildingId?.takeIf { it in game.ownedBuildingIds }
@@ -162,179 +151,200 @@ fun TaskMakerScreen(
             )
         },
     ) { innerPadding ->
-        Column(
+        val formEnabled = !isEditMode || isEditingTaskLoaded
+
+        LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
                 .background(HearthPanelWarm)
                 .padding(innerPadding)
-                .padding(horizontal = 24.dp, vertical = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Text(
-                text = if (isEditMode) "Update your habit" else "Create a habit",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            // In edit mode the form is disabled until the editor VM has
-            // observed at least one emission for the requested taskId.
-            // Without this, a user typing fast could race the seeding
-            // LaunchedEffect: the late DataStore emission would clobber
-            // anything they had already entered. New-task mode has nothing
-            // to wait on, so the form is always live.
-            val formEnabled = !isEditMode || isEditingTaskLoaded
-            OutlinedTextField(
-                value = title,
-                onValueChange = { title = it },
-                label = { Text("What will you do?") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                enabled = formEnabled,
-            )
-            OutlinedTextField(
-                value = note,
-                onValueChange = { note = it },
-                label = { Text("Note (optional)") },
-                modifier = Modifier.fillMaxWidth(),
-                minLines = 3,
-                enabled = formEnabled,
-            )
-
-            Text(
-                text = "Category",
-                style = MaterialTheme.typography.titleSmall,
-            )
-            ExposedDropdownMenuBox(
-                expanded = categoryExpanded,
-                onExpandedChange = { if (formEnabled) categoryExpanded = it },
-            ) {
-                OutlinedTextField(
-                    value = selectedCategory.displayName,
-                    onValueChange = {},
-                    readOnly = true,
-                    singleLine = true,
-                    enabled = formEnabled,
-                    label = { Text("Habit category") },
-                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = categoryExpanded) },
-                    modifier = Modifier
-                        .menuAnchor()
-                        .fillMaxWidth(),
-                    colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
+            item {
+                Text(
+                    text = if (isEditMode) "Update your habit" else "Create a habit",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(bottom = 4.dp),
                 )
-                ExposedDropdownMenu(
+            }
+
+            // Sentence builder card
+            item {
+                BuildSentenceCard(
+                    viewModel = sentenceVm,
+                    startExpanded = true,
+                )
+            }
+
+            // Difficulty card
+            item {
+                DifficultyCard(
+                    viewModel = sentenceVm,
+                    startExpanded = true,
+                )
+            }
+
+            // Optional note
+            item {
+                OutlinedTextField(
+                    value = note,
+                    onValueChange = { note = it },
+                    label = { Text("Note (optional)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 3,
+                    enabled = formEnabled,
+                )
+            }
+
+            // Category dropdown
+            item {
+                Text(
+                    text = "Category",
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                ExposedDropdownMenuBox(
                     expanded = categoryExpanded,
-                    onDismissRequest = { categoryExpanded = false },
+                    onExpandedChange = { if (formEnabled) categoryExpanded = it },
                 ) {
-                    TaskCategory.entries.forEach { category ->
-                        DropdownMenuItem(
-                            text = { Text(category.displayName) },
-                            onClick = {
-                                selectedCategory = category
-                                categoryExpanded = false
-                            },
-                        )
+                    OutlinedTextField(
+                        value = selectedCategory.displayName,
+                        onValueChange = {},
+                        readOnly = true,
+                        singleLine = true,
+                        enabled = formEnabled,
+                        label = { Text("Habit category") },
+                        trailingIcon = {
+                            ExposedDropdownMenuDefaults.TrailingIcon(expanded = categoryExpanded)
+                        },
+                        modifier = Modifier
+                            .menuAnchor()
+                            .fillMaxWidth(),
+                        colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
+                    )
+                    ExposedDropdownMenu(
+                        expanded = categoryExpanded,
+                        onDismissRequest = { categoryExpanded = false },
+                    ) {
+                        TaskCategory.entries.forEach { category ->
+                            DropdownMenuItem(
+                                text = { Text(category.displayName) },
+                                onClick = {
+                                    selectedCategory = category
+                                    categoryExpanded = false
+                                },
+                            )
+                        }
                     }
                 }
             }
 
-            Text(
-                text = "File in building",
-                style = MaterialTheme.typography.titleSmall,
-            )
-            ExposedDropdownMenuBox(
-                expanded = buildingExpanded,
-                onExpandedChange = { if (formEnabled) buildingExpanded = it },
-            ) {
-                val buildingLabel = selectedBuildingId?.let { id ->
-                    villageBuildings.find { it.id == id }?.let { b -> "${b.shortLabel} — ${b.name}" }
-                } ?: "Home (not on map)"
-                OutlinedTextField(
-                    value = buildingLabel,
-                    onValueChange = {},
-                    readOnly = true,
-                    singleLine = true,
-                    enabled = formEnabled,
-                    label = { Text("Building") },
-                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = buildingExpanded) },
-                    modifier = Modifier
-                        .menuAnchor()
-                        .fillMaxWidth(),
-                    colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
+            // Building dropdown
+            item {
+                Text(
+                    text = "File in building",
+                    style = MaterialTheme.typography.titleSmall,
                 )
-                ExposedDropdownMenu(
+                ExposedDropdownMenuBox(
                     expanded = buildingExpanded,
-                    onDismissRequest = { buildingExpanded = false },
+                    onExpandedChange = { if (formEnabled) buildingExpanded = it },
                 ) {
-                    DropdownMenuItem(
-                        text = { Text("Home (not filed to a building)") },
-                        onClick = {
-                            selectedBuildingId = null
-                            buildingExpanded = false
+                    val buildingLabel = selectedBuildingId?.let { id ->
+                        villageBuildings.find { it.id == id }
+                            ?.let { b -> "${b.shortLabel} — ${b.name}" }
+                    } ?: "Home (not on map)"
+                    OutlinedTextField(
+                        value = buildingLabel,
+                        onValueChange = {},
+                        readOnly = true,
+                        singleLine = true,
+                        enabled = formEnabled,
+                        label = { Text("Building") },
+                        trailingIcon = {
+                            ExposedDropdownMenuDefaults.TrailingIcon(expanded = buildingExpanded)
                         },
+                        modifier = Modifier
+                            .menuAnchor()
+                            .fillMaxWidth(),
+                        colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
                     )
-                    buildingsForDropdown.forEach { building ->
+                    ExposedDropdownMenu(
+                        expanded = buildingExpanded,
+                        onDismissRequest = { buildingExpanded = false },
+                    ) {
                         DropdownMenuItem(
-                            text = { Text("${building.shortLabel} — ${building.name}") },
+                            text = { Text("Home (not filed to a building)") },
                             onClick = {
-                                selectedBuildingId = building.id
+                                selectedBuildingId = null
                                 buildingExpanded = false
                             },
                         )
+                        buildingsForDropdown.forEach { building ->
+                            DropdownMenuItem(
+                                text = { Text("${building.shortLabel} — ${building.name}") },
+                                onClick = {
+                                    selectedBuildingId = building.id
+                                    buildingExpanded = false
+                                },
+                            )
+                        }
                     }
                 }
             }
 
-            Button(
-                onClick = {
-                    // Snapshot the persisted task and target category at click
-                    // time so the reward-rebalance below sees the values as
-                    // they were when the user pressed Save, even if the
-                    // editing flow re-emits during the save round-trip.
-                    val before = existingTask
-                    val targetCategory = selectedCategory
-                    // Pop only after the save has actually completed. Calling
-                    // onBack() synchronously after saveAsync used to cancel
-                    // the editor's viewModelScope mid-write (the back stack
-                    // entry, and therefore the VM, gets cleared on pop), so
-                    // slow DataStore writes lost edits.
-                    editorVm.saveAsync(
-                        title = title,
-                        note = note,
-                        category = targetCategory,
-                        buildingId = selectedBuildingId,
-                        onSaved = {
-                            // Apply the reward rebalance only after the task
-                            // category change has actually persisted. Doing it
-                            // before saveAsync left the gem/coin pools mutated
-                            // even when the save threw or was cancelled,
-                            // silently desyncing rewards from tasks.
-                            if (before != null && before.isCompleted && before.category != targetCategory) {
-                                gameStateViewModel.applyRewardDelta(before.category, -before.rewardAmount)
-                                gameStateViewModel.applyRewardDelta(targetCategory, before.rewardAmount)
-                            }
-                            onBack()
+            // Save button
+            item {
+                val sentence = sentenceVm.getFinalSentenceString()
+                val difficulty = sentenceVm.selectedDifficulty
+
+                Button(
+                    onClick = {
+                        val before = existingTask
+                        val targetCategory = selectedCategory
+                        editorVm.saveAsync(
+                            title = sentence,
+                            note = note,
+                            category = targetCategory,
+                            buildingId = selectedBuildingId,
+                            rewardAmount = difficulty.coerceAtLeast(1),
+                            onSaved = {
+                                if (before != null && before.isCompleted &&
+                                    before.category != targetCategory
+                                ) {
+                                    gameStateViewModel.applyRewardDelta(
+                                        before.category, -before.rewardAmount,
+                                    )
+                                    gameStateViewModel.applyRewardDelta(
+                                        targetCategory, before.rewardAmount,
+                                    )
+                                }
+                                onBack()
+                            },
+                        )
+                    },
+                    // Require verb text and a difficulty selection before allowing save
+                    enabled = sentence.length > "I will .".length &&
+                        difficulty > 0 &&
+                        !isSaving &&
+                        (!isEditMode || isEditingTaskLoaded),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(
+                        when {
+                            isSaving -> "Saving..."
+                            isEditMode -> "Save changes"
+                            else -> "Save habit"
                         },
                     )
-                },
-                enabled = title.isNotBlank() && !isSaving && (!isEditMode || isEditingTaskLoaded),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(
-                    when {
-                        isSaving -> "Saving..."
-                        isEditMode -> "Save changes"
-                        else -> "Save habit"
-                    },
-                )
-            }
-            saveError?.let { errorMessage ->
-                // Inline failure surface so the editor screen survives a
-                // transient DataStore IO error instead of silently doing
-                // nothing. The user can retry from the same form.
-                Text(
-                    text = "Couldn't save: $errorMessage",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
-                )
+                }
+                saveError?.let { errorMessage ->
+                    Text(
+                        text = "Couldn't save: $errorMessage",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
             }
         }
     }

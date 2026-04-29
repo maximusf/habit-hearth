@@ -45,17 +45,21 @@ class TaskListViewModel(
         repo.observeTasksForBuilding(buildingId).distinctUntilChanged()
 
     /**
-     * Toggles completion via the repository. The reward-pool delta (gems/coins)
-     * is **not** applied here - PLAN.md keeps that on the future
-     * `ProgressRepository`. [onTransition] reports whether the toggle actually
-     * flipped persisted state so screens can route the gem update to the
-     * legacy [com.project.habithearth.ui.state.GameStateViewModel] without
-     * double-crediting on no-op writes.
+     * Toggles completion via the repository. [onTransition] fires only when the
+     * persisted state actually changed (not on no-op taps) and receives the task
+     * snapshot and the signed gem/coin delta so the caller can route it to
+     * [com.project.habithearth.ui.state.GameStateViewModel] without
+     * double-crediting.
+     *
+     * On completion: calls [TaskRepository.collectCurrency] to apply streak
+     * logic; the credited amount (rewardAmount × streakMultiplier) is passed to
+     * [onTransition] as a positive delta.
+     * On de-completion: delta is -rewardAmount; streak is not affected.
      */
     fun setCompleted(
         taskId: String,
         completed: Boolean,
-        onTransition: ((HabitTask) -> Unit)? = null,
+        onTransition: ((HabitTask, Int) -> Unit)? = null,
     ) {
         viewModelScope.launch {
             // Read the task from the repo, not from `tasks.value`. `tasks` is a
@@ -65,7 +69,14 @@ class TaskListViewModel(
             // the toggle is correct regardless of which screen is active.
             val before = repo.observeTask(taskId).first() ?: return@launch
             val changed = repo.setTaskCompleted(taskId, completed)
-            if (changed) onTransition?.invoke(before)
+            if (changed) {
+                val delta = if (completed) {
+                    repo.collectCurrency(taskId)
+                } else {
+                    -before.rewardAmount
+                }
+                onTransition?.invoke(before, delta)
+            }
         }
     }
 }

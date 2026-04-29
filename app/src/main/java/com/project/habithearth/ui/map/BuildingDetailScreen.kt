@@ -214,12 +214,7 @@ fun BuildingDetailScreen(
                                         // the legacy GameStateViewModel only
                                         // on a real transition. See HomeScreen
                                         // for the equivalent path.
-                                        taskListVm.setCompleted(task.id, checked) { before ->
-                                            val delta = if (checked) {
-                                                before.rewardAmount
-                                            } else {
-                                                -before.rewardAmount
-                                            }
+                                        taskListVm.setCompleted(task.id, checked) { before, delta ->
                                             gameStateViewModel.applyRewardDelta(
                                                 before.category,
                                                 delta,
