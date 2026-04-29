@@ -3,7 +3,6 @@ package com.project.habithearth.ui.profile
 import android.graphics.BitmapFactory
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,7 +14,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -23,7 +21,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Diamond
 import androidx.compose.material.icons.filled.Paid
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilterChip
@@ -65,24 +62,38 @@ import com.project.habithearth.ui.state.GameStateViewModel
 import com.project.habithearth.ui.state.GameUiState
 import kotlinx.coroutines.launch
 
-private data class ProfilePicturePlaceholder(
-    val id: Int,
+// Avatar is derived from the player's dominant gem category, not chosen.
+// Tie (or all zeros) falls back to unsortedCat.
+private data class GemAvatar(
     val label: String,
     val backgroundColor: Color,
-    val imageAssetPath: String? = null,
+    val imageAssetPath: String,
 )
 
-private const val HedgehogPlaceholderAssetPath = "images/characters/hedgehog.PNG"
-private const val BearPlaceholderAssetPath = "images/characters/bear.PNG"
+private const val UnsortedCatAssetPath = "images/ProfilePlaceholders/unsortedCat.png"
+private const val StrengthCatAssetPath = "images/ProfilePlaceholders/strengthCat.png"
+private const val WisdomCatAssetPath = "images/ProfilePlaceholders/wisdomCat.png"
+private const val VitalityCatAssetPath = "images/ProfilePlaceholders/vitalityCat.png"
+private const val SpiritCatAssetPath = "images/ProfilePlaceholders/spiritCat.png"
 
-private val profilePicturePlaceholders = listOf(
-    ProfilePicturePlaceholder(0, "A", Color(0xFF5C7C6A), HedgehogPlaceholderAssetPath),
-    ProfilePicturePlaceholder(1, "B", Color(0xFF6B5B7C), BearPlaceholderAssetPath),
-    ProfilePicturePlaceholder(2, "C", Color(0xFF7C6B5B), HedgehogPlaceholderAssetPath),
-    ProfilePicturePlaceholder(3, "D", Color(0xFF5B6B7C), HedgehogPlaceholderAssetPath),
-    ProfilePicturePlaceholder(4, "E", Color(0xFF7C7C5B), HedgehogPlaceholderAssetPath),
-    ProfilePicturePlaceholder(5, "F", Color(0xFF5B7C7C), HedgehogPlaceholderAssetPath),
-)
+private val UnsortedAvatar = GemAvatar("Cat", Color(0xFF5C5C5C), UnsortedCatAssetPath)
+private val StrengthAvatar = GemAvatar("Strength", Color(0xFF7C3B3B), StrengthCatAssetPath)
+private val WisdomAvatar = GemAvatar("Wisdom", Color(0xFF3B5B7C), WisdomCatAssetPath)
+private val VitalityAvatar = GemAvatar("Vitality", Color(0xFF3B7C5B), VitalityCatAssetPath)
+private val SpiritAvatar = GemAvatar("Spirit", Color(0xFF6B3B7C), SpiritCatAssetPath)
+
+private fun avatarForGems(state: GameUiState): GemAvatar {
+    val counts = listOf(
+        StrengthAvatar to state.strengthGems,
+        WisdomAvatar to state.wisdomGems,
+        VitalityAvatar to state.vitalityGems,
+        SpiritAvatar to state.spiritGems,
+    )
+    val max = counts.maxOf { it.second }
+    if (max <= 0) return UnsortedAvatar
+    val leaders = counts.filter { it.second == max }
+    return if (leaders.size == 1) leaders.first().first else UnsortedAvatar
+}
 
 @Composable
 private fun profileTextButtonColors() = ButtonDefaults.textButtonColors(
@@ -119,22 +130,7 @@ fun ProfileScreen(
     val textSizeOptions = remember { listOf("Small", "Default", "Large", "Extra large") }
     var textSizeExpanded by remember { mutableStateOf(false) }
 
-    val selectedProfile = profilePicturePlaceholders[
-        account.profileAvatarId.coerceIn(0, profilePicturePlaceholders.lastIndex),
-    ]
-    var showProfileGallery by remember { mutableStateOf(false) }
-
-    if (showProfileGallery) {
-        ProfilePictureGalleryDialog(
-            onDismiss = { showProfileGallery = false },
-            onPick = { option ->
-                scope.launch {
-                    userProgressRepository.setProfileAvatarId(option.id)
-                }
-                showProfileGallery = false
-            },
-        )
-    }
+    val selectedProfile = avatarForGems(gameUiState)
 
     Box(
         modifier = modifier
@@ -165,7 +161,6 @@ fun ProfileScreen(
                 ) {
                     ProfileAvatar(
                         selected = selectedProfile,
-                        onClick = { showProfileGallery = true },
                         modifier = Modifier.size(88.dp),
                     )
                     Text(
@@ -417,26 +412,22 @@ fun ProfileScreen(
 
 @Composable
 private fun ProfileAvatar(
-    selected: ProfilePicturePlaceholder,
-    onClick: () -> Unit,
+    selected: GemAvatar,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
     val avatarBitmap = remember(selected.imageAssetPath) {
-        selected.imageAssetPath?.let { path ->
-            decodeAssetBitmap(
-                context = context,
-                assetPath = path,
-                maxEdgePx = 512,
-            )
-        }
+        decodeAssetBitmap(
+            context = context,
+            assetPath = selected.imageAssetPath,
+            maxEdgePx = 512,
+        )
     }
     Box(
         modifier = modifier
             .clip(CircleShape)
             .border(2.dp, MaterialTheme.colorScheme.outline, CircleShape)
-            .background(selected.backgroundColor)
-            .clickable(onClick = onClick),
+            .background(selected.backgroundColor),
         contentAlignment = Alignment.Center,
     ) {
         if (avatarBitmap != null) {
@@ -448,91 +439,12 @@ private fun ProfileAvatar(
             )
         } else {
             Text(
-                text = selected.label,
+                text = selected.label.take(1),
                 style = MaterialTheme.typography.headlineMedium,
                 color = Color.White.copy(alpha = 0.92f),
             )
         }
     }
-}
-
-@Composable
-private fun ProfilePictureGalleryDialog(
-    onDismiss: () -> Unit,
-    onPick: (ProfilePicturePlaceholder) -> Unit,
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
-            Text(
-                text = "Choose profile picture",
-                style = MaterialTheme.typography.titleLarge,
-            )
-        },
-        text = {
-            Column(
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                Text(
-                    text = "Tap one to use it.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                profilePicturePlaceholders.chunked(3).forEach { row ->
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        row.forEachIndexed { index, option ->
-                            if (index > 0) {
-                                Spacer(modifier = Modifier.width(12.dp))
-                            }
-                            val context = LocalContext.current
-                            val optionBitmap = remember(option.imageAssetPath) {
-                                option.imageAssetPath?.let { path ->
-                                    decodeAssetBitmap(
-                                        context = context,
-                                        assetPath = path,
-                                        maxEdgePx = 512,
-                                    )
-                                }
-                            }
-                            Box(
-                                modifier = Modifier
-                                    .size(72.dp)
-                                    .clip(CircleShape)
-                                    .border(2.dp, MaterialTheme.colorScheme.outline, CircleShape)
-                                    .background(option.backgroundColor)
-                                    .clickable { onPick(option) },
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                if (optionBitmap != null) {
-                                    androidx.compose.foundation.Image(
-                                        bitmap = optionBitmap,
-                                        contentDescription = "Profile avatar option ${option.label}",
-                                        modifier = Modifier.fillMaxSize(),
-                                        contentScale = ContentScale.Crop,
-                                    )
-                                } else {
-                                    Text(
-                                        text = option.label,
-                                        style = MaterialTheme.typography.headlineSmall,
-                                        color = Color.White.copy(alpha = 0.92f),
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss, colors = profileTextButtonColors()) {
-                Text("Close")
-            }
-        },
-    )
 }
 
 private fun decodeAssetBitmap(
