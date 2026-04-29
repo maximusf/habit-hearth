@@ -4,6 +4,7 @@ import android.app.Application
 import com.project.habithearth.data.UserProgressRepository
 import com.project.habithearth.data.datastore.userProgressProtoDataStore
 import com.project.habithearth.data.task.TaskRepository
+import com.project.habithearth.notifications.TaskReminderScheduler
 
 class HabitHearthApplication : Application() {
 
@@ -31,5 +32,6 @@ class HabitHearthApplication : Application() {
         super.onCreate()
         userProgressRepository = UserProgressRepository(this)
         taskRepository = TaskRepository(userProgressProtoDataStore)
+        TaskReminderScheduler.ensureChannel(this)
     }
 }

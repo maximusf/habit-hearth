@@ -44,6 +44,7 @@ import com.project.habithearth.ui.map.MapScreen
 import com.project.habithearth.ui.navigation.AppDestination
 import com.project.habithearth.ui.navigation.TopChromeWithMenu
 import com.project.habithearth.ui.navigation.TopResourceBar
+import com.project.habithearth.notifications.TaskReminderScheduler
 import com.project.habithearth.ui.profile.ProfileScreen
 import com.project.habithearth.ui.state.GameStateViewModel
 import com.project.habithearth.ui.state.GameStateViewModelFactory
@@ -93,6 +94,18 @@ fun HabitHearthApp(modifier: Modifier = Modifier) {
 
     LaunchedEffect(isHome) {
         if (!isHome) showBuildingDirectory = false
+    }
+
+    LaunchedEffect(account.pushNotifications, account.notificationHour, account.notificationMinute) {
+        if (account.pushNotifications) {
+            TaskReminderScheduler.scheduleDaily(
+                context = context,
+                hour = account.notificationHour,
+                minute = account.notificationMinute,
+            )
+        } else {
+            TaskReminderScheduler.cancel(context)
+        }
     }
 
     val welcomeName = account.displayName.ifBlank { "Traveler" }
