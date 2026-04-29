@@ -2,7 +2,9 @@ package com.project.habithearth.ui.tasks
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -10,6 +12,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -21,6 +25,8 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarColors
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -29,14 +35,17 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.project.habithearth.HabitHearthApplication
 import com.project.habithearth.model.TaskCategory
 import com.project.habithearth.ui.map.defaultVillageBuildings
 import com.project.habithearth.ui.state.GameStateViewModel
-import com.project.habithearth.ui.theme.HearthPanelWarm
+
+
 
 private const val CottageBuildingId = "cottage"
 
@@ -139,18 +148,32 @@ fun TaskMakerScreen(
     }
 
     Scaffold(
-        modifier = modifier.fillMaxSize(),
+        //containerColor = MaterialTheme.colorScheme.background,
+        //modifier = modifier.fillMaxSize(),
         topBar = {
-            TopAppBar(
-                title = { Text(if (isEditMode) "Edit habit" else "New habit") },
+            CenterAlignedTopAppBar(
+                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                ),
+                title = {
+                    Text(
+                        text = if (isEditMode) "Task: ${sentenceVm.getFinalSentenceString()}" else "New habit",
+                        softWrap = true,
+
+                    ) },
+
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
+                    IconButton(
+                        enabled = !isEditMode,
+                        onClick = onBack
+                    ) {
                         Icon(
+
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Back",
                         )
                     }
-                },
+                }
             )
         },
     ) { innerPadding ->
@@ -159,7 +182,7 @@ fun TaskMakerScreen(
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .background(HearthPanelWarm)
+                .background(MaterialTheme.colorScheme.background)
                 .padding(innerPadding)
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -189,20 +212,12 @@ fun TaskMakerScreen(
                 )
             }
 
-            // Optional note
-            item {
-                OutlinedTextField(
-                    value = note,
-                    onValueChange = { note = it },
-                    label = { Text("Note (optional)") },
-                    modifier = Modifier.fillMaxWidth(),
-                    minLines = 3,
-                    enabled = formEnabled,
-                )
-            }
 
-            // Category dropdown
+
             item {
+                Card(){
+                Column(modifier=Modifier. padding(15.dp)){
+                // Category dropdown
                 Text(
                     text = "Category",
                     style = MaterialTheme.typography.titleSmall,
@@ -244,39 +259,46 @@ fun TaskMakerScreen(
             }
 
             // Building dropdown
-            item {
-                Text(
-                    text = "File in building",
-                    style = MaterialTheme.typography.titleSmall,
+            Text(
+                text = "File in building",
+                style = MaterialTheme.typography.titleSmall,
+            )
+            ExposedDropdownMenuBox(
+                expanded = buildingExpanded,
+                onExpandedChange = { if (formEnabled) buildingExpanded = it },
+            ) {
+                val buildingLabel = selectedBuildingId?.let { id ->
+                    villageBuildings.find { it.id == id }
+                        ?.let { b -> "${b.shortLabel} — ${b.name}" }
+                } ?: "Home (not on map)"
+                OutlinedTextField(
+                    value = buildingLabel,
+                    onValueChange = {},
+                    readOnly = true,
+                    singleLine = true,
+                    enabled = formEnabled,
+                    label = { Text("Building") },
+                    trailingIcon = {
+                        ExposedDropdownMenuDefaults.TrailingIcon(expanded = buildingExpanded)
+                    },
+                    modifier = Modifier
+                        .menuAnchor()
+                        .fillMaxWidth(),
+                    colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
                 )
-                ExposedDropdownMenuBox(
+                ExposedDropdownMenu(
                     expanded = buildingExpanded,
-                    onExpandedChange = { if (formEnabled) buildingExpanded = it },
+                    onDismissRequest = { buildingExpanded = false },
                 ) {
-                    val buildingLabel = selectedBuildingId?.let { id ->
-                        villageBuildings.find { it.id == id }
-                            ?.let { b -> "${b.shortLabel} — ${b.name}" }
-                    } ?: "Home — Your Cottage"
-                    OutlinedTextField(
-                        value = buildingLabel,
-                        onValueChange = {},
-                        readOnly = true,
-                        singleLine = true,
-                        enabled = formEnabled,
-                        label = { Text("Building") },
-                        trailingIcon = {
-                            ExposedDropdownMenuDefaults.TrailingIcon(expanded = buildingExpanded)
+                    DropdownMenuItem(
+                        text = { Text("Home (not filed to a building)") },
+                        onClick = {
+                            selectedBuildingId = null
+                            buildingExpanded = false
                         },
-                        modifier = Modifier
-                            .menuAnchor()
-                            .fillMaxWidth(),
-                        colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
                     )
-                    ExposedDropdownMenu(
-                        expanded = buildingExpanded,
-                        onDismissRequest = { buildingExpanded = false },
-                    ) {
-                        buildingsForDropdown.forEach { building ->
+                    buildingsForDropdown.forEach { building ->
+                        if (building.category == selectedCategory) {
                             DropdownMenuItem(
                                 text = { Text("${building.shortLabel} — ${building.name}") },
                                 onClick = {
@@ -287,6 +309,21 @@ fun TaskMakerScreen(
                         }
                     }
                 }
+            }
+        }
+    }
+
+
+            // Optional note
+            item {
+                OutlinedTextField(
+                    value = note,
+                    onValueChange = { note = it },
+                    label = { Text("Note (optional)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 3,
+                    enabled = formEnabled,
+                )
             }
 
             // Save button

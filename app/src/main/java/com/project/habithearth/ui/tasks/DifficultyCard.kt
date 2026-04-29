@@ -64,7 +64,7 @@ fun DifficultyCard(
                         onDismissRequest = { viewModel.isDifficultyMenuVisible = false },
                         modifier = Modifier
                             .width(40.dp)
-                            .height(20.dp)
+                            //.height(20.dp)
                             .align(Alignment.Center),
                     ) {
                         TaskSentenceViewModel.Difficulty.entries.forEach { level ->
