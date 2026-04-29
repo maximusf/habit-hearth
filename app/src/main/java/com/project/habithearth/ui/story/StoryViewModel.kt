@@ -1,350 +1,323 @@
 package com.project.habithearth.ui.story
 
-import androidx.lifecycle.ViewModel
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.google.ai.client.generativeai.GenerativeModel
-import com.project.habithearth.BuildConfig
+import com.project.habithearth.HabitHearthApplication
+import com.project.habithearth.data.story.Chapter1ProgressRepository
 import com.project.habithearth.ui.state.GameUiState
-import kotlinx.coroutines.Job
+import com.project.habithearth.ui.state.levelFor
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
+// Top-level screen mode. The story flow opens at the chapter-select cover and
+// only transitions to Reading on a Begin/Resume/Replay tap, so a returning
+// player can revisit the cover, see chapter 2's "Coming Soon" placeholder, and
+// pick which chapter to dive back into.
+enum class StoryViewMode { Select, Reading }
+
+// UI-side mirror of StoryChoice. Keeps the screen package free of any direct
+// dependency on Chapter1 graph internals while still letting the screen render
+// per-choice gem costs and category gates.
+data class StoryChoiceUi(
+    val label: String,
+    val category: String? = null,
+    val gemCost: Int = 0,
+)
+
 data class StoryPage(
+    val nodeId: String,
     val text: String,
-    val choices: List<String> = emptyList(),
+    val choices: List<StoryChoiceUi> = emptyList(),
+    val backgroundAsset: String? = null,
+    val characterAssets: List<String> = emptyList(),
 )
 
 data class StoryUiState(
-    val chapterTitle: String = "Chapter 1: Survival",
+    val chapterTitle: String = Chapter1.TITLE,
     val pages: List<StoryPage> = emptyList(),
     val currentPageIndex: Int = 0,
-    val isLoading: Boolean = false,
     val errorMessage: String? = null,
-    val hasShownOpening: Boolean = false,
     val hasShownEnding: Boolean = false,
-    val pendingStoryText: String? = null,
+    val isLoading: Boolean = false,
+    // Decisions, keyed by the intro node id that hosted the choice page.
+    // Once recorded, the screen renders the picked option highlighted and all
+    // other options as disabled — choices are permanent.
+    val madeChoices: Map<String, String> = emptyMap(),
+    // Populated when goToNextPage is blocked by a level requirement on the
+    // upcoming intro node. Cleared on the next successful advance.
+    val lockedReason: String? = null,
+    // Mirror of lockedReason for use as an effect key — when the player's
+    // level catches up to this number, the screen auto-advances.
+    val lockedRequiredLevel: Int? = null,
+    // True once hydrate has run, so the screen can avoid flashing the begin
+    // button before disk-loaded pages arrive on cold start.
+    val isHydrated: Boolean = false,
+    // Which top-level surface to render. Cold launch always opens at Select
+    // so the player can see the chapter list (and any future-chapter
+    // placeholders) before re-entering the story.
+    val viewMode: StoryViewMode = StoryViewMode.Select,
 ) {
     val currentPage: StoryPage? get() = pages.getOrNull(currentPageIndex)
     val canGoBack: Boolean get() = currentPageIndex > 0
     val canGoForward: Boolean get() = currentPageIndex < pages.size - 1
-    val isAtLastPage: Boolean get() = pages.isEmpty() || currentPageIndex == pages.size - 1
     val isOnChoicePage: Boolean get() = currentPage?.choices?.isNotEmpty() == true
+    val isLocked: Boolean get() = lockedReason != null
+    val isAtLastPage: Boolean get() = pages.isEmpty() || currentPageIndex == pages.size - 1
 }
 
-class StoryViewModel : ViewModel() {
+class StoryViewModel(application: Application) : AndroidViewModel(application) {
 
-    private val generativeModel = GenerativeModel(
-        modelName = "gemini-3-flash-preview",
-        apiKey = BuildConfig.GEMINI_API_KEY,
-    )
+    private val repo: Chapter1ProgressRepository =
+        (application as HabitHearthApplication).chapter1ProgressRepository
 
     private val _uiState = MutableStateFlow(StoryUiState())
     val uiState: StateFlow<StoryUiState> = _uiState.asStateFlow()
 
-    private var preloadJob: Job? = null
-
-    // Dummy game state — wire to real GameUiState later
-    // 50% XP puts us in the choice window (40–60%) for testing
-    private val dummyXpProgress = 0.50f
-    private val dummyStrengthGems = 12
-    private val dummyWisdomGems = 4
-    private val dummyVitalityGems = 7
-    private val dummySpiritGems = 3
-    private val dummyCoins = 20
+    init {
+        // Hydrate from disk on first construction. Saved snapshots use only
+        // node ids; the StoryPage list is rebuilt from Chapter1.nodes so the
+        // chapter author can edit prose without invalidating saves.
+        viewModelScope.launch {
+            val snap = repo.load()
+            _uiState.value = if (snap.visitedNodeIds.isEmpty()) {
+                _uiState.value.copy(isHydrated = true)
+            } else {
+                rebuildState(snap)
+            }
+        }
+        // Listen for the debug "Reset progress" signal. The game-state VM
+        // wipes its own state plus the chapter repo, then emits, so by the
+        // time we see it the on-disk snapshot is already empty.
+        viewModelScope.launch {
+            getApplication<HabitHearthApplication>().debugResetEvents.collect {
+                _uiState.value = StoryUiState(isHydrated = true, viewMode = StoryViewMode.Select)
+            }
+        }
+    }
 
     fun beginStory(gameState: GameUiState) {
-        if (_uiState.value.pages.isNotEmpty() || _uiState.value.isLoading) return
-        generateNextPage(gameState)
+        // Begin handles both first-launch (no pages yet) and resume after the
+        // player navigated back to the chapter cover. In both cases we end up
+        // in Reading mode; only first-launch needs to seed the start node.
+        if (_uiState.value.pages.isEmpty()) {
+            tryAppendNode(Chapter1.START_ID, gameState)
+        }
+        _uiState.value = _uiState.value.copy(viewMode = StoryViewMode.Reading)
+    }
+
+    /** Resume an in-progress chapter without seeding. Used by the chapter card. */
+    fun resumeStory() {
+        _uiState.value = _uiState.value.copy(viewMode = StoryViewMode.Reading)
+    }
+
+    /** Return to the chapter-select cover. Pages stay so Resume picks back up. */
+    fun goToChapterSelect() {
+        _uiState.value = _uiState.value.copy(viewMode = StoryViewMode.Select)
+        persist()
+    }
+
+    // Wipe pages, locked-in decisions, and ending flags so the player can run
+    // the chapter again. Gem costs were never consumed (only gated), so there's
+    // no balance to refund. Surfaced from the screen as a "Restart Chapter"
+    // button on the TBC page or "Replay" on the chapter card.
+    fun restartChapter(gameState: GameUiState) {
+        _uiState.value = StoryUiState(isHydrated = true, viewMode = StoryViewMode.Reading)
+        tryAppendNode(Chapter1.START_ID, gameState)
     }
 
     fun goToNextPage(gameState: GameUiState) {
         val state = _uiState.value
-        if (state.isLoading) return
-
         if (state.canGoForward) {
-            _uiState.value = state.copy(currentPageIndex = state.currentPageIndex + 1)
+            _uiState.value = state.copy(
+                currentPageIndex = state.currentPageIndex + 1,
+                lockedReason = null,
+                lockedRequiredLevel = null,
+            )
+            persist()
             return
         }
-
-        if (!state.hasShownEnding) generateNextPage(gameState)
+        val current = state.currentPage ?: return
+        val node = Chapter1.node(current.nodeId) ?: return
+        val nextId = node.nextNodeId ?: return
+        tryAppendNode(nextId, gameState)
     }
 
     fun goToPreviousPage() {
         val state = _uiState.value
         if (state.canGoBack) {
-            _uiState.value = state.copy(currentPageIndex = state.currentPageIndex - 1)
-        }
-    }
-
-    fun makeChoice(choice: String) {
-        viewModelScope.launch {
-            if (!hasGeminiApiKey()) {
-                _uiState.value = _uiState.value.copy(
-                    errorMessage = "Missing Gemini API key. Add GEMINI_API_KEY to local.properties.",
-                )
-                return@launch
-            }
-
-            preloadJob?.cancel()
-            _uiState.value = _uiState.value.copy(
-                isLoading = true,
-                errorMessage = null,
-                pendingStoryText = null,
+            _uiState.value = state.copy(
+                currentPageIndex = state.currentPageIndex - 1,
+                lockedReason = null,
+                lockedRequiredLevel = null,
             )
-
-            try {
-                val prompt = """
-                    Continue the village rebuilding story. The player chose: "$choice"
-
-                    Previous story context: ${_uiState.value.currentPage?.text ?: ""}
-
-                    Write a 100-150 word continuation showing the result of their choice.
-                    Style: punchy, dramatic, with a touch of humor. Second person ("you").
-                    Setting: a village recovering from a dragon attack, fighting the "Veil of Stagnation" (purple vines and fog).
-                    Do not use markdown formatting.
-                    Do not end with "What do you do?" or any choice prompt.
-                """.trimIndent()
-
-                val response = generativeModel.generateContent(prompt)
-                val text = response.text ?: "The veil swallowed your choice... try again."
-
-                addPage(text)
-                _uiState.value = _uiState.value.copy(isLoading = false)
-
-                val xpPercent = (dummyXpProgress * 100).toInt()
-                preloadNextSegment(getDominantCategory(), xpPercent)
-            } catch (e: Exception) {
-                _uiState.value = _uiState.value.copy(
-                    isLoading = false,
-                    errorMessage = "Error: ${e.localizedMessage}",
-                )
-            }
+            persist()
         }
     }
 
-    private fun generateNextPage(gameState: GameUiState) {
-        viewModelScope.launch {
-            if (!hasGeminiApiKey()) {
-                _uiState.value = _uiState.value.copy(
-                    errorMessage = "Missing Gemini API key. Add GEMINI_API_KEY to local.properties.",
-                )
-                return@launch
-            }
+    fun makeChoice(choice: String, gameState: GameUiState) {
+        val state = _uiState.value
+        val current = state.currentPage ?: return
+        val node = Chapter1.node(current.nodeId) ?: return
+        if (state.madeChoices.containsKey(node.id)) return
+        val picked = node.choices.firstOrNull { it.label == choice } ?: return
+        if (!canAfford(picked.category, picked.gemCost, gameState)) return
 
-            val xpPercent = (dummyXpProgress * 100).toInt()
-            val dominantCategory = getDominantCategory()
-
-            val phase = when {
-                xpPercent < 25 -> "beginning"
-                xpPercent < 75 -> "middle"
-                else -> "climax"
-            }
-
-            // Use pre-generated content if ready (middle phase only)
-            val pending = _uiState.value.pendingStoryText
-            if (pending != null && phase == "middle") {
-                preloadJob?.cancel()
-                val choices = if (xpPercent in 40..60 && !hasChoicePageAlready()) {
-                    generateChoices(dominantCategory)
-                } else {
-                    emptyList()
-                }
-                addPage(pending, choices)
-                _uiState.value = _uiState.value.copy(
-                    pendingStoryText = null,
-                    hasShownOpening = true,
-                )
-                if (choices.isEmpty()) preloadNextSegment(dominantCategory, xpPercent)
-                return@launch
-            }
-
-            preloadJob?.cancel()
-            _uiState.value = _uiState.value.copy(pendingStoryText = null)
-
-            when (phase) {
-                "beginning" -> {
-                    addPage(CHAPTER_1_OPENING)
-                    _uiState.value = _uiState.value.copy(hasShownOpening = true)
-                    preloadNextSegment(dominantCategory, xpPercent)
-                }
-                "middle" -> {
-                    _uiState.value = _uiState.value.copy(isLoading = true, errorMessage = null)
-                    try {
-                        if (!_uiState.value.hasShownOpening) {
-                            addPage(CHAPTER_1_OPENING)
-                            _uiState.value = _uiState.value.copy(hasShownOpening = true)
-                        }
-                        val prompt = buildStoryPrompt(dominantCategory, xpPercent, "middle")
-                        val response = generativeModel.generateContent(prompt)
-                        val text = response.text ?: "The veil grows thicker... no tale emerged."
-                        val choices = if (xpPercent in 40..60 && !hasChoicePageAlready()) {
-                            generateChoices(dominantCategory)
-                        } else {
-                            emptyList()
-                        }
-                        addPage(text, choices)
-                        _uiState.value = _uiState.value.copy(
-                            isLoading = false,
-                            hasShownOpening = true,
-                        )
-                        if (choices.isEmpty()) preloadNextSegment(dominantCategory, xpPercent)
-                    } catch (e: Exception) {
-                        _uiState.value = _uiState.value.copy(
-                            isLoading = false,
-                            errorMessage = "Error: ${e.localizedMessage}",
-                        )
-                    }
-                }
-                "climax" -> {
-                    _uiState.value = _uiState.value.copy(isLoading = true, errorMessage = null)
-                    try {
-                        if (!_uiState.value.hasShownOpening) {
-                            addPage(CHAPTER_1_OPENING)
-                            _uiState.value = _uiState.value.copy(hasShownOpening = true)
-                        }
-                        val prompt = buildStoryPrompt(dominantCategory, xpPercent, "climax")
-                        val response = generativeModel.generateContent(prompt)
-                        val text = response.text ?: "The veil grows thicker... no tale emerged."
-                        addPage(text)
-                        addPage(CHAPTER_1_ENDING)
-                        _uiState.value = _uiState.value.copy(
-                            isLoading = false,
-                            hasShownOpening = true,
-                            hasShownEnding = true,
-                        )
-                    } catch (e: Exception) {
-                        _uiState.value = _uiState.value.copy(
-                            isLoading = false,
-                            errorMessage = "Error: ${e.localizedMessage}",
-                        )
-                    }
-                }
-            }
-        }
+        val trimmed = state.pages.take(state.currentPageIndex + 1)
+        _uiState.value = state.copy(
+            pages = trimmed,
+            currentPageIndex = trimmed.lastIndex,
+            madeChoices = state.madeChoices + (node.id to choice),
+        )
+        tryAppendNode(picked.nextNodeId, gameState)
     }
 
-    private fun addPage(text: String, choices: List<String> = emptyList()) {
-        val newPages = _uiState.value.pages + StoryPage(text = text, choices = choices)
+    private fun canAfford(category: String?, gemCost: Int, gameState: GameUiState): Boolean {
+        if (category == null || gemCost <= 0) return true
+        val available = when (category) {
+            Chapter1.CATEGORY_STRENGTH -> gameState.strengthGems
+            Chapter1.CATEGORY_WISDOM -> gameState.wisdomGems
+            Chapter1.CATEGORY_VITALITY -> gameState.vitalityGems
+            Chapter1.CATEGORY_SPIRIT -> gameState.spiritGems
+            else -> 0
+        }
+        return available >= gemCost
+    }
+
+    private fun tryAppendNode(nodeId: String, gameState: GameUiState) {
+        val node = Chapter1.node(nodeId) ?: return
+        val playerLevel = levelFor(gameState.totalXp)
+        if (playerLevel < node.requiredLevel) {
+            _uiState.value = _uiState.value.copy(
+                lockedReason = "Reach Level ${node.requiredLevel} to continue the story.",
+                lockedRequiredLevel = node.requiredLevel,
+            )
+            persist()
+            return
+        }
+        appendNode(node)
+    }
+
+    private fun appendNode(node: StoryNode) {
+        val mainPage = StoryPage(
+            nodeId = node.id,
+            text = node.text,
+            choices = node.choices.map {
+                StoryChoiceUi(label = it.label, category = it.category, gemCost = it.gemCost)
+            },
+            backgroundAsset = node.backgroundAsset,
+            characterAssets = node.characterAssets,
+        )
+
+        if (node.id == "s_tbc") {
+            val state = _uiState.value
+            val dominant = dominantCategory(state.madeChoices)
+            val diaryPage = StoryPage(
+                nodeId = "s_diary",
+                text = Chapter1.diaryFor(dominant),
+                backgroundAsset = node.backgroundAsset,
+                characterAssets = node.characterAssets,
+            )
+            val newPages = state.pages + diaryPage + mainPage
+            _uiState.value = state.copy(
+                pages = newPages,
+                currentPageIndex = state.pages.size,
+                hasShownEnding = true,
+                lockedReason = null,
+                lockedRequiredLevel = null,
+            )
+            persist()
+            return
+        }
+
+        val newPages = _uiState.value.pages + mainPage
         _uiState.value = _uiState.value.copy(
             pages = newPages,
             currentPageIndex = newPages.size - 1,
+            hasShownEnding = _uiState.value.hasShownEnding || node.isEnding,
+            lockedReason = null,
+            lockedRequiredLevel = null,
         )
+        persist()
     }
 
-    private fun hasChoicePageAlready(): Boolean =
-        _uiState.value.pages.any { it.choices.isNotEmpty() }
+    private fun dominantCategory(picks: Map<String, String>): String? {
+        if (picks.isEmpty()) return null
+        val counts = mutableMapOf<String, Int>()
+        for ((nodeId, label) in picks) {
+            val node = Chapter1.node(nodeId) ?: continue
+            val choice = node.choices.firstOrNull { it.label == label } ?: continue
+            val cat = choice.category ?: continue
+            counts[cat] = (counts[cat] ?: 0) + 1
+        }
+        if (counts.isEmpty()) return null
+        val max = counts.values.max()
+        val leaders = counts.filter { it.value == max }
+        return if (leaders.size == 1) leaders.keys.first() else null
+    }
 
-    private fun preloadNextSegment(dominantCategory: String, xpPercent: Int) {
-        if (_uiState.value.hasShownEnding) return
-        val nextPhase = if (xpPercent < 75) "middle" else "climax"
-        preloadJob = viewModelScope.launch {
-            try {
-                val prompt = buildStoryPrompt(dominantCategory, xpPercent, nextPhase)
-                val response = generativeModel.generateContent(prompt)
-                val text = response.text ?: return@launch
-                _uiState.value = _uiState.value.copy(pendingStoryText = text)
-            } catch (e: Exception) {
-                // Silent fail — on-demand generation is the fallback
+    // Reconstructs the StoryPage list and current index from a saved snapshot.
+    // Diary text is regenerated from the saved choices so a content edit to
+    // Chapter1.diaryFor() is reflected on the next launch even for old saves.
+    private fun rebuildState(snap: Chapter1ProgressRepository.Snapshot): StoryUiState {
+        val rebuiltPages = snap.visitedNodeIds.map { id ->
+            if (id == "s_diary") {
+                // Diary is dynamic: rebuilt against current choices, with the
+                // s_tbc node's art reused (matches appendNode behavior).
+                val tbc = Chapter1.node("s_tbc")
+                StoryPage(
+                    nodeId = "s_diary",
+                    text = Chapter1.diaryFor(dominantCategory(snap.madeChoices)),
+                    backgroundAsset = tbc?.backgroundAsset,
+                    characterAssets = tbc?.characterAssets.orEmpty(),
+                )
+            } else {
+                val node = Chapter1.node(id)
+                if (node == null) {
+                    // Unknown id (mid-flight chapter content rename). Fall back
+                    // to a placeholder page so the pagination stays consistent
+                    // rather than silently dropping the entry.
+                    StoryPage(nodeId = id, text = "")
+                } else {
+                    StoryPage(
+                        nodeId = node.id,
+                        text = node.text,
+                        choices = node.choices.map {
+                            StoryChoiceUi(it.label, it.category, it.gemCost)
+                        },
+                        backgroundAsset = node.backgroundAsset,
+                        characterAssets = node.characterAssets,
+                    )
+                }
             }
         }
-    }
-
-    private fun buildStoryPrompt(
-        dominantCategory: String,
-        xpPercent: Int,
-        phase: String,
-    ): String = """
-        You are the narrator of "Habit Hearth," a village rebuilding story.
-
-        Setting: A village destroyed by dragons. The "Veil of Stagnation" — purple vines
-        and thick fog — creeps in whenever work stops. The player is the lead engineer
-        tasked with rebuilding the village.
-
-        Current game state:
-        - Chapter phase: $phase ($xpPercent% XP earned toward the chapter goal)
-        - Player's dominant activity category: $dominantCategory
-        - Strength gems: $dummyStrengthGems, Wisdom gems: $dummyWisdomGems
-        - Vitality gems: $dummyVitalityGems, Spirit gems: $dummySpiritGems
-        - Coins: $dummyCoins
-        - Tasks completed: 0 / 0
-
-        Flavor the narrative based on the dominant category:
-        - Strength: physical labor, hauling debris, forging tools, combat training
-        - Wisdom: salvaging burnt books, studying old blueprints, calculating solutions
-        - Vitality: restoring hot springs, tending gardens, healing villagers
-        - Spirit: creating art, baking bread, inspiring the community with music
-
-        Write a 150-200 word story segment for the "$phase" phase.
-        Style: punchy, dramatic, and lightly comedic. Written in second person ("you").
-        Do not use markdown formatting.
-        Do not end with "What do you do?" or any choice prompt — choices are shown as separate UI buttons.
-    """.trimIndent()
-
-    private fun getDominantCategory(): String {
-        val categories = mapOf(
-            "Strength" to dummyStrengthGems,
-            "Wisdom" to dummyWisdomGems,
-            "Vitality" to dummyVitalityGems,
-            "Spirit" to dummySpiritGems,
+        val safeIndex = snap.currentPageIndex.coerceIn(0, (rebuiltPages.size - 1).coerceAtLeast(0))
+        return StoryUiState(
+            pages = rebuiltPages,
+            currentPageIndex = safeIndex,
+            madeChoices = snap.madeChoices,
+            hasShownEnding = snap.hasShownEnding,
+            isHydrated = true,
         )
-        return categories.maxByOrNull { it.value }?.key ?: "Strength"
     }
 
-    private fun generateChoices(dominantCategory: String): List<String> {
-        return when (dominantCategory) {
-            "Strength" -> listOf(
-                "Use heavy shears to hack through the vines",
-                "Drive the anchor bolts with a sledgehammer before the next quake",
-                "Clear debris to open a path to the training grounds",
-            )
-            "Wisdom" -> listOf(
-                "Mix a chemical solvent in the library to dissolve the vines",
-                "Calculate the exact stress points to use fewer bolts with higher efficiency",
-                "Decode an old blueprint for a vine-resistant coating",
-            )
-            "Vitality" -> listOf(
-                "Redirect the hot springs steam to wilt the vines",
-                "Brew a healing tonic to protect the villagers from the fog",
-                "Plant resilient herbs to push back the veil",
-            )
-            "Spirit" -> listOf(
-                "Organize a work song to keep the villagers' rhythm steady",
-                "Paint murals on the buildings to ward off the veil",
-                "Bake morale-boosting bread for the exhausted workers",
-            )
-            else -> listOf(
-                "Use heavy shears to hack through the vines",
-                "Mix a chemical solvent to dissolve the vines",
-                "Redirect the hot springs steam to wilt the vines",
+    private fun persist() {
+        // Don't write back during the initial hydrate pass: until isHydrated
+        // flips true, _uiState may still be the empty default and would clobber
+        // a real save on disk.
+        if (!_uiState.value.isHydrated) return
+        val state = _uiState.value
+        viewModelScope.launch {
+            repo.save(
+                Chapter1ProgressRepository.Snapshot(
+                    visitedNodeIds = state.pages.map { it.nodeId },
+                    madeChoices = state.madeChoices,
+                    currentPageIndex = state.currentPageIndex,
+                    hasShownEnding = state.hasShownEnding,
+                ),
             )
         }
-    }
-
-    private fun hasGeminiApiKey(): Boolean = BuildConfig.GEMINI_API_KEY.isNotBlank()
-
-    companion object {
-        val CHAPTER_1_OPENING = """
-            The village of Ashenveil is unrecognizable. Three days ago, a dragon named Morrath passed overhead — not in attack, just passing — and the heat from its wings was enough. Thatched roofs caught first. Then the granary. Then everything. You are Ashenveil's lead engineer, and right now you're standing in the ash looking at what used to be the town square.
-
-            The Veil of Stagnation got here fast. Purple vines are already crawling up the blacksmith's wall, thick as rope. The fog pooled overnight in the low spots between buildings. You've seen the Veil before, on abandoned villages, but never on your own.
-
-            The survivors are watching you. Thirty-one of them. They're not asking questions yet, but they will be soon. You take stock: the tools are mostly intact, a few buildings are salvageable, and the hot springs to the north are untouched. It's not nothing.
-
-            You pull out your notebook. The Veil only advances when nothing is being done. So. You'd better get to work.
-        """.trimIndent()
-
-        val CHAPTER_1_ENDING = """
-            The last vine shivers and goes still. Around the four main buildings, the Veil has pulled back — not gone, never gone, but far enough that you can see the stonework again. A cheer goes up from the workers. Someone starts banging a rhythm on an overturned barrel.
-
-            You let yourself feel it for exactly four seconds.
-
-            Then you crouch down and press your hand to the town square flagstones. They're warm. Not from the sun — from below. Morrath's heat baked the ground itself when it passed. The stone has been cooling for three days, contracting unevenly, and now you can feel it: a hairline fracture running under the square, east to west, corner to corner.
-
-            The foundation is failing.
-
-            You close your notebook. There's a lot more work to do.
-        """.trimIndent()
     }
 }

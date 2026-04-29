@@ -62,7 +62,11 @@ fun HabitHearthApp(modifier: Modifier = Modifier) {
     val userProgressRepository = app.userProgressRepository
 
     val gameVm: GameStateViewModel = viewModel(
-        factory = GameStateViewModelFactory(userProgressRepository),
+        factory = GameStateViewModelFactory(
+            repository = userProgressRepository,
+            chapter1ProgressRepository = app.chapter1ProgressRepository,
+            debugResetEmitter = app.debugResetEvents,
+        ),
     )
     val game by gameVm.uiState.collectAsState()
     val account by userProgressRepository.accountSettings.collectAsState(initial = AccountSettings.DEFAULT)

@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.project.habithearth.data.UserProgressRepository
+import com.project.habithearth.data.story.Chapter1ProgressRepository
 import com.project.habithearth.model.ResourceProgress
 import com.project.habithearth.model.TaskCategory
 import com.project.habithearth.model.canAfford
@@ -11,6 +12,7 @@ import com.project.habithearth.model.withUnlockCostPaid
 import com.project.habithearth.ui.map.MainHubBuildingIds
 import com.project.habithearth.ui.map.unlockCost
 import com.project.habithearth.ui.map.villageBuildingById
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -33,6 +35,12 @@ data class GameUiState(
 
 class GameStateViewModel(
     private val userProgressRepository: UserProgressRepository,
+    // Optional debug-only collaborators; nullable so non-debug surface area and
+    // tests can construct the VM without setting up the full Application graph.
+    // debugResetProgress wipes both pieces in addition to resetting in-memory
+    // game state, then signals other VMs (StoryViewModel) via the SharedFlow.
+    private val chapter1ProgressRepository: Chapter1ProgressRepository? = null,
+    private val debugResetEmitter: MutableSharedFlow<Unit>? = null,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(GameUiState())
@@ -131,10 +139,16 @@ class GameStateViewModel(
         persist()
     }
 
-    /** Debug-only: zero pools, re-seed starter hubs, clear xp. */
+    /** Debug-only: zero pools, re-seed starter hubs, clear xp, wipe story. */
     fun debugResetProgress() {
         _uiState.value = GameUiState()
         persist()
+        viewModelScope.launch {
+            chapter1ProgressRepository?.clear()
+            // Emit after the disk wipe so a collector that loads on signal
+            // sees an already-empty repo.
+            debugResetEmitter?.emit(Unit)
+        }
     }
 
     /**
@@ -196,9 +210,15 @@ fun GameUiState.copyResources(rp: ResourceProgress): GameUiState =
 @Suppress("UNCHECKED_CAST")
 class GameStateViewModelFactory(
     private val repository: UserProgressRepository,
+    private val chapter1ProgressRepository: Chapter1ProgressRepository? = null,
+    private val debugResetEmitter: MutableSharedFlow<Unit>? = null,
 ) : ViewModelProvider.Factory {
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
-        return GameStateViewModel(repository) as T
+        return GameStateViewModel(
+            userProgressRepository = repository,
+            chapter1ProgressRepository = chapter1ProgressRepository,
+            debugResetEmitter = debugResetEmitter,
+        ) as T
     }
 }
 
