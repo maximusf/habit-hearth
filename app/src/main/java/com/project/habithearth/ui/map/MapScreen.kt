@@ -44,13 +44,18 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.project.habithearth.HabitHearthApplication
 import com.project.habithearth.model.canAfford
 import com.project.habithearth.ui.components.LockScreenOrientation
 import com.project.habithearth.ui.state.GameUiState
 import com.project.habithearth.ui.state.resources
+import com.project.habithearth.ui.tasks.TaskListViewModel
+import com.project.habithearth.ui.tasks.TaskListViewModelFactory
 import com.project.habithearth.ui.theme.HabitHearthTheme
 import com.project.habithearth.ui.theme.HearthBackground
 
@@ -71,6 +76,8 @@ private val BuildingMarkerWidth = 50.dp
 private val BuildingMarkerHeight = 56.dp
 private val LockedBadgeSize = 28.dp
 private val LockedIconSize = 18.dp
+private val PendingBadgeSize = 14.dp
+private const val CottageBuildingId = "cottage"
 
 @Composable
 fun MapScreen(
@@ -98,6 +105,20 @@ fun MapScreen(
             scale = nextScale,
             pan = nextPan,
         )
+    }
+
+    val app = LocalContext.current.applicationContext as HabitHearthApplication
+    val taskListVm: TaskListViewModel = viewModel(
+        factory = TaskListViewModelFactory(app.taskRepository),
+    )
+    val tasks by taskListVm.tasks.collectAsState()
+    val pendingByBuilding = remember(tasks) {
+        tasks
+            .asSequence()
+            .filter { !it.isCompleted }
+            .map { task -> task.buildingId?.takeIf { it.isNotBlank() } ?: CottageBuildingId }
+            .groupingBy { it }
+            .eachCount()
     }
 
     val buildings = remember { defaultVillageBuildings() }
@@ -166,6 +187,7 @@ fun MapScreen(
                         building = building,
                         assetPath = assetPath,
                         locked = building.id !in ownedBuildingIds,
+                        pendingCount = pendingByBuilding[building.id] ?: 0,
                         modifier = Modifier.offset(
                             x = maxWidth * building.xFraction - BuildingMarkerWidth / 2,
                             y = maxHeight * building.yFraction - BuildingMarkerHeight / 2,
@@ -278,6 +300,7 @@ private fun BuildingMarker(
     building: VillageBuilding,
     assetPath: String,
     locked: Boolean,
+    pendingCount: Int,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -324,6 +347,25 @@ private fun BuildingMarker(
                         tint = Color.White.copy(alpha = 0.95f),
                     )
                 }
+            }
+        }
+        if (pendingCount > 0) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .size(PendingBadgeSize)
+                    .background(
+                        color = MaterialTheme.colorScheme.errorContainer,
+                        shape = CircleShape,
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = pendingCount.toString(),
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onErrorContainer,
+                )
             }
         }
     }
