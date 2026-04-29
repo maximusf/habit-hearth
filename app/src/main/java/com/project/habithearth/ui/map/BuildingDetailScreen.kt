@@ -50,7 +50,7 @@ import com.project.habithearth.ui.state.GameStateViewModel
 import com.project.habithearth.ui.state.resources
 import com.project.habithearth.ui.tasks.TaskListViewModel
 import com.project.habithearth.ui.tasks.TaskListViewModelFactory
-import com.project.habithearth.ui.theme.HearthPanelWarm
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -120,7 +120,7 @@ fun BuildingDetailScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .background(HearthPanelWarm)
+
                 .padding(innerPadding)
                 .padding(horizontal = 16.dp),
         ) {
