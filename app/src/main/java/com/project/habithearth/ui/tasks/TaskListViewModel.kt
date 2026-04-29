@@ -5,11 +5,13 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.project.habithearth.data.task.TaskRepository
 import com.project.habithearth.model.HabitTask
+import com.project.habithearth.model.toEpochMs
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -35,6 +37,13 @@ class TaskListViewModel(
 ) : ViewModel() {
 
     val tasks: StateFlow<List<HabitTask>> = repo.observeTasks()
+        .map { list ->
+            val now = System.currentTimeMillis()
+            list.sortedBy { task ->
+                val lastMs = task.collectionLog.lastOrNull()?.timestamp?.toEpochMs() ?: 0L
+                now - lastMs <= 24L * 60 * 60 * 1000  // on cooldown → true → sinks to bottom
+            }
+        }
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(stopTimeoutMillis = 5_000),

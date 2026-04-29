@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -50,7 +51,7 @@ fun DifficultyCard(
                 modifier = Modifier.padding(15.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(text = "Difficulty (1-5):   ", fontSize = 20.sp)
+                Text(text = "Difficulty (1-5):   ", style = MaterialTheme.typography.bodyLarge)
                 Box {
                     Button(onClick = { viewModel.isDifficultyMenuVisible = true }) {
                         Text(
@@ -63,6 +64,7 @@ fun DifficultyCard(
                         onDismissRequest = { viewModel.isDifficultyMenuVisible = false },
                         modifier = Modifier
                             .width(40.dp)
+                            .height(20.dp)
                             .align(Alignment.Center),
                     ) {
                         TaskSentenceViewModel.Difficulty.entries.forEach { level ->
@@ -98,7 +100,7 @@ fun DifficultyCard(
             ) {
                 Text(
                     text = "Difficulty: ${viewModel.selectedDifficulty}",
-                    style = MaterialTheme.typography.bodyLarge,
+                    style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.weight(1f),
                 )
                 Icon(

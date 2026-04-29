@@ -67,7 +67,7 @@ fun BuildSentenceCard(
                                 Text(
                                     text = segment.text,
                                     modifier = Modifier.padding(top = 15.dp),
-                                    fontSize = 18.sp,
+                                    style = MaterialTheme.typography.bodyLarge,
                                 )
                             }
 
@@ -79,7 +79,7 @@ fun BuildSentenceCard(
                                             segment.copy(text = newValue)
                                     },
                                     modifier = Modifier.width(IntrinsicSize.Min),
-                                    label = { Text("Verb") },
+                                    label = { Text(text = "Verb", style = MaterialTheme.typography.bodyMedium) },
                                 )
                             }
 
@@ -214,7 +214,7 @@ fun BuildSentenceCard(
                                                 Text(
                                                     text = option,
                                                     modifier = Modifier.padding(start = 16.dp),
-                                                    fontSize = 14.sp,
+                                                    style = MaterialTheme.typography.bodyLarge,
                                                 )
                                             },
                                             onClick = {
@@ -255,7 +255,7 @@ fun BuildSentenceCard(
             ) {
                 Text(
                     text = viewModel.getFinalSentenceString(),
-                    style = MaterialTheme.typography.bodyLarge,
+                    style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.weight(1f),
                 )
                 Icon(
