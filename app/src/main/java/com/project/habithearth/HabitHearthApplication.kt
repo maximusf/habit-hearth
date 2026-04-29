@@ -5,6 +5,7 @@ import com.project.habithearth.data.UserProgressRepository
 import com.project.habithearth.data.datastore.userProgressProtoDataStore
 import com.project.habithearth.data.story.Chapter1ProgressRepository
 import com.project.habithearth.data.task.TaskRepository
+import com.project.habithearth.notifications.TaskReminderScheduler
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 
@@ -52,5 +53,6 @@ class HabitHearthApplication : Application() {
         userProgressRepository = UserProgressRepository(this)
         taskRepository = TaskRepository(userProgressProtoDataStore)
         chapter1ProgressRepository = Chapter1ProgressRepository(this)
+        TaskReminderScheduler.ensureChannel(this)
     }
 }

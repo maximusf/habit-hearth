@@ -38,6 +38,8 @@ import com.project.habithearth.ui.map.defaultVillageBuildings
 import com.project.habithearth.ui.state.GameStateViewModel
 import com.project.habithearth.ui.theme.HearthPanelWarm
 
+private const val CottageBuildingId = "cottage"
+
 /**
  * Habit create/edit screen.
  *
@@ -114,13 +116,14 @@ fun TaskMakerScreen(
                 if (task != null) {
                     note = task.note
                     selectedCategory = task.category
-                    selectedBuildingId = task.buildingId
+                    selectedBuildingId = task.buildingId ?: CottageBuildingId
                     sentenceVm.seedFromTask(task)
                     seeded = true
                 }
             } else {
                 selectedBuildingId =
                     initialBuildingId?.takeIf { it in game.ownedBuildingIds }
+                        ?: CottageBuildingId
                 seeded = true
             }
         }
@@ -130,7 +133,7 @@ fun TaskMakerScreen(
         if (!isEditMode) {
             val sid = selectedBuildingId
             if (sid != null && sid !in game.ownedBuildingIds) {
-                selectedBuildingId = null
+                selectedBuildingId = CottageBuildingId.takeIf { it in game.ownedBuildingIds }
             }
         }
     }
@@ -253,7 +256,7 @@ fun TaskMakerScreen(
                     val buildingLabel = selectedBuildingId?.let { id ->
                         villageBuildings.find { it.id == id }
                             ?.let { b -> "${b.shortLabel} — ${b.name}" }
-                    } ?: "Home (not on map)"
+                    } ?: "Home — Your Cottage"
                     OutlinedTextField(
                         value = buildingLabel,
                         onValueChange = {},
@@ -273,13 +276,6 @@ fun TaskMakerScreen(
                         expanded = buildingExpanded,
                         onDismissRequest = { buildingExpanded = false },
                     ) {
-                        DropdownMenuItem(
-                            text = { Text("Home (not filed to a building)") },
-                            onClick = {
-                                selectedBuildingId = null
-                                buildingExpanded = false
-                            },
-                        )
                         buildingsForDropdown.forEach { building ->
                             DropdownMenuItem(
                                 text = { Text("${building.shortLabel} — ${building.name}") },
@@ -306,7 +302,7 @@ fun TaskMakerScreen(
                             title = sentence,
                             note = note,
                             category = targetCategory,
-                            buildingId = selectedBuildingId,
+                            buildingId = selectedBuildingId ?: CottageBuildingId,
                             rewardAmount = difficulty.coerceAtLeast(1),
                             onSaved = {
                                 if (before != null && before.isCompleted &&

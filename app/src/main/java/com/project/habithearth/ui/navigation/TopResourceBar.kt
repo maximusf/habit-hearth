@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material.icons.Icons
@@ -63,20 +64,23 @@ fun TopResourceBar(
     coins: Int = 0,
     totalXp: Int = 0,
     modifier: Modifier = Modifier,
-    navigationIcon: @Composable (() -> Unit)? = null, // New parameter for the hamburger
+    navigationIcon: @Composable (() -> Unit)? = null,
 ) {
     val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
 
     Surface(
         tonalElevation = 3.dp,
         color = MaterialTheme.colorScheme.surfaceContainer,
-        modifier = modifier
-            .fillMaxWidth()
-            .windowInsetsPadding(WindowInsets.displayCutout)
+        // The surface itself fills the max width but DOES NOT have status bar padding.
+        // This ensures the background color bleeds all the way to the top.
+        modifier = modifier.fillMaxWidth()
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                // Move padding inside so the Surface color stays at the very top
+                .statusBarsPadding()
+                .windowInsetsPadding(WindowInsets.displayCutout)
                 .padding(start = 4.dp, end = 12.dp, top = 6.dp, bottom = 6.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
@@ -241,9 +245,6 @@ private fun sampleSizeForMaxEdge(width: Int, height: Int, maxEdgePx: Int): Int {
     return sample
 }
 
-/**
- * Modernized Chrome: Hamburger menu is now inline with the resource stats.
- */
 @Composable
 fun TopChromeWithMenu(
     onMenuClick: () -> Unit,

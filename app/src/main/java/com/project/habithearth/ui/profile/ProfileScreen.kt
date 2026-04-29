@@ -1,6 +1,11 @@
 package com.project.habithearth.ui.profile
 
+import android.app.TimePickerDialog
+import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.BitmapFactory
+import android.os.Build
+import android.text.format.DateFormat
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -54,9 +59,14 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import com.project.habithearth.BuildConfig
 import com.project.habithearth.data.AccountSettings
 import com.project.habithearth.data.UserProgressRepository
+import com.project.habithearth.notifications.TaskReminderReceiver
+import com.project.habithearth.notifications.TaskReminderScheduler
 import com.project.habithearth.ui.components.VerticalScrollIndicator
 import com.project.habithearth.ui.state.GameStateViewModel
 import com.project.habithearth.ui.state.GameUiState
@@ -112,6 +122,7 @@ fun ProfileScreen(
 ) {
     val scrollState = rememberScrollState()
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
     val account by userProgressRepository.accountSettings.collectAsState(initial = AccountSettings.DEFAULT)
 
     var displayNameDraft by remember { mutableStateOf(account.displayName) }
@@ -120,6 +131,24 @@ fun ProfileScreen(
     }
 
     var notice by remember { mutableStateOf<String?>(null) }
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        scope.launch {
+            userProgressRepository.setPushNotifications(granted)
+            if (granted) {
+                TaskReminderScheduler.scheduleDaily(
+                    context = context,
+                    hour = account.notificationHour,
+                    minute = account.notificationMinute,
+                )
+                notice = "Notifications enabled."
+            } else {
+                TaskReminderScheduler.cancel(context)
+                notice = "Notifications permission is required to send reminders."
+            }
+        }
+    }
 
     val themeOptions = remember { listOf("System default", "Light", "Dark") }
     var themeExpanded by remember { mutableStateOf(false) }
@@ -289,9 +318,66 @@ fun ProfileScreen(
                 label = "Push notifications",
                 checked = account.pushNotifications,
                 onCheckedChange = { enabled ->
-                    scope.launch { userProgressRepository.setPushNotifications(enabled) }
+                    if (enabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        val alreadyGranted = ContextCompat.checkSelfPermission(
+                            context,
+                            android.Manifest.permission.POST_NOTIFICATIONS,
+                        ) == PackageManager.PERMISSION_GRANTED
+                        if (alreadyGranted) {
+                            scope.launch {
+                                userProgressRepository.setPushNotifications(true)
+                                TaskReminderScheduler.scheduleDaily(
+                                    context = context,
+                                    hour = account.notificationHour,
+                                    minute = account.notificationMinute,
+                                )
+                            }
+                        } else {
+                            permissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                        }
+                    } else {
+                        scope.launch {
+                            userProgressRepository.setPushNotifications(enabled)
+                            if (enabled) {
+                                TaskReminderScheduler.scheduleDaily(
+                                    context = context,
+                                    hour = account.notificationHour,
+                                    minute = account.notificationMinute,
+                                )
+                            } else {
+                                TaskReminderScheduler.cancel(context)
+                            }
+                        }
+                    }
                 },
             )
+
+            NotificationTimeRow(
+                hour = account.notificationHour,
+                minute = account.notificationMinute,
+                enabled = account.pushNotifications,
+                onTimeSelected = { hour, minute ->
+                    scope.launch {
+                        userProgressRepository.setNotificationTime(hour, minute)
+                        if (account.pushNotifications) {
+                            TaskReminderScheduler.scheduleDaily(
+                                context = context,
+                                hour = hour,
+                                minute = minute,
+                            )
+                        }
+                    }
+                },
+            )
+            OutlinedButton(
+                enabled = account.pushNotifications,
+                onClick = {
+                    context.sendBroadcast(Intent(context, TaskReminderReceiver::class.java))
+                    notice = "Test notification triggered."
+                },
+            ) {
+                Text("Send test notification now")
+            }
 
             SettingsToggleRow(
                 label = "Vacation mode",
@@ -406,6 +492,59 @@ fun ProfileScreen(
                 .align(Alignment.CenterEnd)
                 .fillMaxHeight()
                 .padding(vertical = 8.dp),
+        )
+    }
+}
+
+@Composable
+private fun NotificationTimeRow(
+    hour: Int,
+    minute: Int,
+    enabled: Boolean,
+    onTimeSelected: (hour: Int, minute: Int) -> Unit,
+) {
+    val context = LocalContext.current
+    val is24Hour = DateFormat.is24HourFormat(context)
+    val timeLabel = remember(hour, minute, is24Hour) {
+        val h = hour.coerceIn(0, 23)
+        val m = minute.coerceIn(0, 59)
+        if (is24Hour) {
+            String.format("%02d:%02d", h, m)
+        } else {
+            val suffix = if (h >= 12) "PM" else "AM"
+            val twelveHour = when (val mod = h % 12) {
+                0 -> 12
+                else -> mod
+            }
+            String.format("%d:%02d %s", twelveHour, m, suffix)
+        }
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = "Notification time",
+            style = MaterialTheme.typography.bodyLarge,
+        )
+        OutlinedButton(
+            enabled = enabled,
+            onClick = {
+                TimePickerDialog(
+                    context,
+                    { _, selectedHour, selectedMinute ->
+                        onTimeSelected(selectedHour, selectedMinute)
+                    },
+                    hour,
+                    minute,
+                    is24Hour,
+                ).show()
+            },
+        ) {
+            Text(timeLabel)
+        }
+        Text(
+            text = "Reminder text: You have X tasks that you need to do",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }

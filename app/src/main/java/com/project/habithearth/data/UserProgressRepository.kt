@@ -30,6 +30,8 @@ private val KEY_THEME_MODE = stringPreferencesKey("theme_mode")
 private val KEY_LANGUAGE = stringPreferencesKey("language")
 private val KEY_TEXT_SIZE = stringPreferencesKey("text_size")
 private val KEY_PROFILE_AVATAR_ID = intPreferencesKey("profile_avatar_id")
+private val KEY_NOTIFICATION_HOUR = intPreferencesKey("notification_hour")
+private val KEY_NOTIFICATION_MINUTE = intPreferencesKey("notification_minute")
 
 data class AccountSettings(
     val displayName: String,
@@ -39,6 +41,8 @@ data class AccountSettings(
     val language: String,
     val textSize: String,
     val profileAvatarId: Int,
+    val notificationHour: Int,
+    val notificationMinute: Int,
 ) {
     companion object {
         val DEFAULT = AccountSettings(
@@ -49,6 +53,8 @@ data class AccountSettings(
             language = "English",
             textSize = "Default",
             profileAvatarId = 0,
+            notificationHour = 20,
+            notificationMinute = 0,
         )
     }
 }
@@ -69,6 +75,8 @@ class UserProgressRepository(
             language = prefs[KEY_LANGUAGE] ?: AccountSettings.DEFAULT.language,
             textSize = prefs[KEY_TEXT_SIZE] ?: AccountSettings.DEFAULT.textSize,
             profileAvatarId = prefs[KEY_PROFILE_AVATAR_ID] ?: AccountSettings.DEFAULT.profileAvatarId,
+            notificationHour = prefs[KEY_NOTIFICATION_HOUR] ?: AccountSettings.DEFAULT.notificationHour,
+            notificationMinute = prefs[KEY_NOTIFICATION_MINUTE] ?: AccountSettings.DEFAULT.notificationMinute,
         )
     }
 
@@ -100,6 +108,13 @@ class UserProgressRepository(
 
     suspend fun setProfileAvatarId(id: Int) {
         dataStore.edit { it[KEY_PROFILE_AVATAR_ID] = id }
+    }
+
+    suspend fun setNotificationTime(hour: Int, minute: Int) {
+        dataStore.edit {
+            it[KEY_NOTIFICATION_HOUR] = hour.coerceIn(0, 23)
+            it[KEY_NOTIFICATION_MINUTE] = minute.coerceIn(0, 59)
+        }
     }
 
     suspend fun loadGameState(): GameUiState? {

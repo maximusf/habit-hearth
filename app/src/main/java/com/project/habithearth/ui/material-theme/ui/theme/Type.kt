@@ -5,7 +5,7 @@ import androidx.compose.ui.text.font.FontFamily
 
 val bodyFontFamily = FontFamily.Serif
 
-val displayFontFamily = FontFamily.Cursive
+val displayFontFamily = FontFamily.Serif
 
 // Default Material 3 typography values
 val baseline = Typography()
