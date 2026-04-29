@@ -158,20 +158,19 @@ fun TaskMakerScreen(
                 title = {
                     Text(
                         text = if (isEditMode) "Task: ${sentenceVm.getFinalSentenceString()}" else "New habit",
+                        textAlign = TextAlign.Center,
                         softWrap = true,
 
                     ) },
 
                 navigationIcon = {
-                    IconButton(
-                        enabled = !isEditMode,
-                        onClick = onBack
-                    ) {
-                        Icon(
-
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
-                        )
+                    if (!isEditMode) {
+                        IconButton(onClick = onBack) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Back",
+                            )
+                        }
                     }
                 }
             )
@@ -189,7 +188,7 @@ fun TaskMakerScreen(
         ) {
             item {
                 Text(
-                    text = if (isEditMode) "Update your habit" else "Create a habit",
+                    text = if (isEditMode) " " else "Create a habit",
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(bottom = 4.dp),
