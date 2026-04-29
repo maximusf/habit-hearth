@@ -72,8 +72,8 @@ private data class ProfilePicturePlaceholder(
     val imageAssetPath: String? = null,
 )
 
-private const val HedgehogPlaceholderAssetPath = "images/ProfilePlaceholders/hedgehog.PNG"
-private const val BearPlaceholderAssetPath = "images/ProfilePlaceholders/bear.PNG"
+private const val HedgehogPlaceholderAssetPath = "images/characters/hedgehog.PNG"
+private const val BearPlaceholderAssetPath = "images/characters/bear.PNG"
 
 private val profilePicturePlaceholders = listOf(
     ProfilePicturePlaceholder(0, "A", Color(0xFF5C7C6A), HedgehogPlaceholderAssetPath),
