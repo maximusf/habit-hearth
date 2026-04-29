@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
@@ -25,8 +26,6 @@ import androidx.compose.ui.unit.dp
 import android.widget.Toast
 import androidx.compose.material3.NavigationBarItemDefaults
 import com.project.habithearth.BuildConfig
-import com.project.habithearth.ui.theme.HearthBackground
-import com.project.habithearth.ui.theme.HearthPanelWarm
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -128,8 +127,8 @@ fun HabitHearthApp(modifier: Modifier = Modifier) {
             bottomBar = {
                 if (!hideMainChrome) {
                 NavigationBar(
-                    containerColor = HearthPanelWarm,
-                    contentColor = HearthBackground,
+                    containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                    contentColor = MaterialTheme.colorScheme.onSurface,
                 ) {
                         AppDestination.entries.forEach { destination ->
                             val selected =
@@ -143,11 +142,11 @@ fun HabitHearthApp(modifier: Modifier = Modifier) {
                                 },
                                 label = { Text(destination.label) },
                                 colors = NavigationBarItemDefaults.colors(
-                                    selectedIconColor = HearthBackground,
-                                    selectedTextColor = HearthBackground,
-                                    unselectedIconColor = HearthBackground,
-                                    unselectedTextColor = HearthBackground,
-                                    indicatorColor = HearthBackground.copy(alpha = 0.18f),
+                                    selectedIconColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                                    selectedTextColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                                    unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    indicatorColor = MaterialTheme.colorScheme.secondaryContainer,
                                 ),
                                 selected = selected,
                                 onClick = {
